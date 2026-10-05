@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Control de Gafetes Pro - OBS</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #09090b; color: #f4f4f5; margin: 0; padding: 15px; }
+    .layout { display: grid; grid-template-columns: 360px 1fr 280px; gap: 15px; max-width: 1600px; margin: auto; }
+    .card { background: #18181b; padding: 15px; border-radius: 8px; border: 1px solid #27272a; max-height: 90vh; overflow-y: auto; }
+    h3 { margin-top: 0; font-size: 15px; border-bottom: 1px solid #27272a; padding-bottom: 8px; color: #3b82f6; }
+    label { display: block; margin-top: 8px; font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.5px; }
+    input[type="text"], input[type="number"], select { width: 100%; padding: 6px; margin-top: 2px; background: #09090b; border: 1px solid #27272a; color: #fff; border-radius: 4px; box-sizing: border-box; font-size: 13px; }
+    input[type="color"] { width: 100%; height: 32px; background: #09090b; border: 1px solid #27272a; border-radius: 4px; cursor: pointer; padding: 2px; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; cursor: pointer; font-size: 12px; }
+    .checkbox-row input { width: auto; cursor: pointer; }
+    button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; font-weight: bold; width: 100%; margin-top: 10px; font-size: 13px; }
+    .btn-red { background: #dc2626; color: white; }
+    .btn-gray { background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46; }
+    .btn-gray.active { background: #16a34a; color: white; border-color: #22c55e; }
+
+    /* PREVIO */
+    #stage { width: 100%; aspect-ratio: 16/9; background: #000; background-image: radial-gradient(#27272a 1px, transparent 1px); background-size: 12px 12px; position: relative; border-radius: 6px; overflow: hidden; border: 2px solid #3f3f46; }
+    .prev-box { position: absolute; padding: 8px 14px; border-style: solid; cursor: move; user-select: none; display: flex; gap: 10px; align-items: center; transform: translate(-50%, -50%); max-width: 80%; }
+    .prev-box.selected { outline: 2px dashed #f59e0b; }
+    .prev-box.logo-top { flex-direction: column; text-align: center; }
+    .prev-box.logo-bottom { flex-direction: column-reverse; text-align: center; }
+    .prev-box.logo-right { flex-direction: row-reverse; }
+    
+    .bot-item { margin-bottom: 8px; padding: 10px; background: #09090b; border-radius: 6px; border: 1px solid #27272a; }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- COLUMNA 1: CONFIGURACIÓN -->
+  <div class="card">
+    <h3>Editar Gafete</h3>
+    <label>Seleccionar Gafete:</label>
+    <select id="selGafete" onchange="seleccionarGafete(this.value)"></select>
+    <button class="btn-gray" onclick="socket.emit('crear-gafete')">+ Crear Nuevo Gafete</button>
+
+    <label>Nombre Identificador (Panel):</label>
+    <input type="text" id="nombreGafete" oninput="actualizar()">
+
+    <label>Línea 1 (Título):</label>
+    <input type="text" id="linea1" oninput="actualizar()">
+    <div class="row">
+      <input type="number" id="size1" title="Tamaño px" oninput="actualizar()">
+      <input type="color" id="color1" oninput="actualizar()">
+    </div>
+
+    <label>Línea 2 (Subtítulo):</label>
+    <input type="text" id="linea2" oninput="actualizar()">
+    <div class="row">
+      <input type="number" id="size2" title="Tamaño px" oninput="actualizar()">
+      <input type="color" id="color2" oninput="actualizar()">
+    </div>
+
+    <!-- ICONO / EMOJI / LOGO -->
+    <label class="checkbox-row">
+      <input type="checkbox" id="usarLogo" onchange="actualizar()">
+      <span><strong>¿Usar Icono / Logo?</strong></span>
+    </label>
+    <div id="sec-logo" style="display:none; padding-left: 10px; border-left: 2px solid #2563eb; margin-top:5px;">
+      <div class="row">
+        <div>
+          <label>Tipo:</label>
+          <select id="tipoIcono" onchange="actualizar()">
+            <option value="emoji">Emoji de Texto</option>
+            <option value="imagen">URL de Imagen</option>
+          </select>
+        </div>
+        <div>
+          <label>Posición:</label>
+          <select id="logoPos" onchange="actualizar()">
+            <option value="left">Izquierda</option>
+            <option value="right">Derecha</option>
+            <option value="top">Arriba</option>
+            <option value="bottom">Abajo</option>
+          </select>
+        </div>
+      </div>
+      <div id="wrapper-emoji">
+        <label>Emoji / Carácter:</label>
+        <input type="text" id="emojiIcono" placeholder="🔥, 🎙️, 🧠, 🎯" oninput="actualizar()">
+      </div>
+      <div id="wrapper-imagen" style="display:none;">
+        <label>URL Imagen / Logo:</label>
+        <input type="text" id="logoUrl" placeholder="http://... o logo.png" oninput="actualizar()">
+      </div>
+      <label>Tamaño (px):</label>
+      <input type="number" id="logoSize" oninput="actualizar()">
+    </div>
+
+    <!-- ESTILOS DE FORMA Y COLOR -->
+    <label style="margin-top:15px; color:#3b82f6;">Estilo del Gafete (Fondo y Borde)</label>
+    <div class="row">
+      <div>
+        <label>Forma / Esquinas:</label>
+        <select id="borderRadius" onchange="actualizar()">
+          <option value="2px">Rectangular</option>
+          <option value="12px">Redondeado</option>
+          <option value="50px">Píldora</option>
+        </select>
+      </div>
+      <div>
+        <label>Tipografía:</label>
+        <select id="fontFamily" onchange="actualizar()">
+          <option value="system-ui, sans-serif">Sistema</option>
+          <option value="Arial, sans-serif">Arial</option>
+          <option value="'Roboto', sans-serif">Roboto</option>
+          <option value="'Impact', sans-serif">Impact</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div><label>Fondo:</label><input type="color" id="bgColor" oninput="actualizar()"></div>
+      <div><label>Opacidad (%):</label><input type="number" id="bgAlpha" min="0" max="100" oninput="actualizar()"></div>
+      <div><label>Borde:</label><input type="color" id="borderColor" oninput="actualizar()"></div>
+    </div>
+
+    <!-- ANIMACIONES -->
+    <label style="margin-top:15px; color:#3b82f6;">Animaciones y Tiempo</label>
+    <div class="row">
+      <div>
+        <label>Entrada:</label>
+        <select id="animEntrada" onchange="actualizar()">
+          <option value="slideLeft">Deslizar Izq</option>
+          <option value="slideRight">Deslizar Der</option>
+          <option value="slideUp">Deslizar Arriba</option>
+          <option value="bounce">Rebote</option>
+          <option value="zoom">Zoom</option>
+          <option value="fadeIn">Fade</option>
+        </select>
+      </div>
+      <div>
+        <label>Salida:</label>
+        <select id="animSalida" onchange="actualizar()">
+          <option value="slideLeft">Deslizar Izq</option>
+          <option value="slideRight">Deslizar Der</option>
+          <option value="slideUp">Deslizar Arriba</option>
+          <option value="zoom">Zoom</option>
+          <option value="fadeOut">Fade</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- TIEMPOS -->
+    <label>T1: Tiempo Visible (0 = Mantiene Fijo):</label>
+    <input type="number" id="timerSeconds" min="0" oninput="actualizar()">
+
+    <label class="checkbox-row">
+      <input type="checkbox" id="usarCiclo" onchange="actualizar()">
+      <span><strong>Habilitar Bucle (Auto-Reaparición)</strong></span>
+    </label>
+    <label>T2: Tiempo Oculto en Bucle (s):</label>
+    <input type="number" id="tiempoOculto" min="1" oninput="actualizar()">
+
+    <button class="btn-red" style="margin-top:20px;" onclick="eliminarActual()">Eliminar Gafete</button>
+  </div>
+
+  <!-- COLUMNA 2: PREVIO -->
+  <div class="card">
+    <h3>Previo Interactivo (Arrastra para Ubicar)</h3>
+    <div id="stage"></div>
+    <div class="row" style="margin-top:8px;">
+      <label>Pos X (%): <span id="lblX">0</span></label>
+      <label>Pos Y (%): <span id="lblY">0</span></label>
+    </div>
+  </div>
+
+  <!-- COLUMNA 3: BOTONERA DE CONTROL -->
+  <div class="card">
+    <h3>Botonera de Transmisión</h3>
+    <p style="font-size: 11px; color: #a1a1aa; margin-top:-5px;">Presiona para activar u ocultar de forma independiente cada gafete en OBS.</p>
+    <div id="botonera"></div>
+  </div>
+
+</div>
+
+<script>
+  const socket = io();
+  let gafetesLocales = {};
+  let idSeleccionado = null;
+  let dragging = false;
+
+  socket.on('sync-gafetes', (data) => {
+    gafetesLocales = data;
+    const keys = Object.keys(data);
+    if (keys.length > 0 && (!idSeleccionado || !gafetesLocales[idSeleccionado])) {
+      idSeleccionado = keys[0];
+    }
+    render();
+  });
+
+  function render() {
+    const sel = document.getElementById('selGafete');
+    sel.innerHTML = '';
+    Object.values(gafetesLocales).forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.id;
+      opt.textContent = g.nombreGafete || g.id;
+      if (g.id === idSeleccionado) opt.selected = true;
+      sel.appendChild(opt);
+    });
+
+    const g = gafetesLocales[idSeleccionado];
+    if (g) {
+      document.getElementById('nombreGafete').value = g.nombreGafete || '';
+      document.getElementById('linea1').value = g.linea1 || '';
+      document.getElementById('size1').value = g.size1 || 24;
+      document.getElementById('color1').value = g.color1 || '#ffffff';
+      document.getElementById('linea2').value = g.linea2 || '';
+      document.getElementById('size2').value = g.size2 || 14;
+      document.getElementById('color2').value = g.color2 || '#cccccc';
+
+      document.getElementById('usarLogo').checked = !!g.usarLogo;
+      document.getElementById('sec-logo').style.display = g.usarLogo ? 'block' : 'none';
+      document.getElementById('tipoIcono').value = g.tipoIcono || 'emoji';
+      document.getElementById('emojiIcono').value = g.emojiIcono || '🎙️';
+      document.getElementById('logoUrl').value = g.logoUrl || '';
+      document.getElementById('logoSize').value = g.logoSize || 36;
+      document.getElementById('logoPos').value = g.logoPos || 'left';
+
+      document.getElementById('wrapper-emoji').style.display = (g.tipoIcono === 'emoji') ? 'block' : 'none';
+      document.getElementById('wrapper-imagen').style.display = (g.tipoIcono === 'imagen') ? 'block' : 'none';
+
+      document.getElementById('borderRadius').value = g.borderRadius || '12px';
+      document.getElementById('fontFamily').value = g.fontFamily || 'system-ui, sans-serif';
+      document.getElementById('bgColor').value = g.bgColor || '#0f172a';
+      document.getElementById('bgAlpha').value = g.bgAlpha ?? 85;
+      document.getElementById('borderColor').value = g.borderColor || '#3b82f6';
+
+      document.getElementById('animEntrada').value = g.animEntrada || 'slideLeft';
+      document.getElementById('animSalida').value = g.animSalida || 'slideLeft';
+      document.getElementById('timerSeconds').value = g.timerSeconds ?? 0;
+      document.getElementById('usarCiclo').checked = !!g.usarCiclo;
+      document.getElementById('tiempoOculto').value = g.tiempoOculto || 3;
+
+      document.getElementById('lblX').textContent = Math.round(g.posX || 0);
+      document.getElementById('lblY').textContent = Math.round(g.posY || 0);
+    }
+
+    // PREVIO
+    const stage = document.getElementById('stage');
+    stage.innerHTML = '';
+    Object.values(gafetesLocales).forEach(item => {
+      const box = document.createElement('div');
+      box.className = `prev-box logo-${item.logoPos || 'left'} ${item.id === idSeleccionado ? 'selected' : ''}`;
+      box.style.left = (item.posX || 0) + '%';
+      box.style.top = (item.posY || 0) + '%';
+      box.style.borderRadius = item.borderRadius || '12px';
+      box.style.fontFamily = item.fontFamily || 'sans-serif';
+      box.style.borderWidth = '2px';
+      box.style.borderColor = item.borderColor || '#3b82f6';
+      
+      const r = parseInt((item.bgColor || '#0f172a').slice(1, 3), 16);
+      const g = parseInt((item.bgColor || '#0f172a').slice(3, 5), 16);
+      const b = parseInt((item.bgColor || '#0f172a').slice(5, 7), 16);
+      box.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${(item.bgAlpha ?? 85) / 100})`;
+
+      let iconHtml = '';
+      if (item.usarLogo) {
+        if (item.tipoIcono === 'imagen' && item.logoUrl) {
+          iconHtml = `<img src="${item.logoUrl}" style="width:${(item.logoSize||36)/2}px; height:${(item.logoSize||36)/2}px; object-fit:contain;">`;
+        } else {
+          iconHtml = `<span style="font-size:${(item.logoSize||36)/1.8}px; line-height:1;">${item.emojiIcono || '🎙️'}</span>`;
+        }
+      }
+
+      box.innerHTML = `
+        ${iconHtml}
+        <div>
+          <div style="font-weight:bold; font-size:${(item.size1||24)/2}px; color:${item.color1};">${item.linea1}</div>
+          <div style="font-size:${(item.size2||14)/2}px; color:${item.color2};">${item.linea2}</div>
+        </div>
+      `;
+
+      box.onmousedown = () => {
+        idSeleccionado = item.id;
+        dragging = true;
+        render();
+      };
+      stage.appendChild(box);
+    });
+
+    // BOTONERA
+    const bot = document.getElementById('botonera');
+    bot.innerHTML = '';
+    Object.values(gafetesLocales).forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'bot-item';
+      const estaActivo = item.visibilidad;
+      div.innerHTML = `
+        <div style="font-size:12px; font-weight:bold; margin-bottom:4px;">
+          ${item.emojiIcono || '🏷️'} ${item.nombreGafete} ${item.usarCiclo ? '🔄' : ''}
+        </div>
+        <button class="btn-gray ${estaActivo ? 'active' : ''}" onclick="socket.emit('toggle-visibilidad', '${item.id}')">
+          ${estaActivo ? 'EN PANTALLA (Clic para Ocultar)' : 'MOSTRAR EN OBS'}
+        </button>
+      `;
+      bot.appendChild(div);
+    });
+  }
+
+  // DRAG & DROP
+  const stage = document.getElementById('stage');
+  stage.onmousemove = (e) => {
+    if (!dragging || !idSeleccionado) return;
+    const rect = stage.getBoundingClientRect();
+    let x = ((e.clientX - rect.left) / rect.width) * 100;
+    let y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    x = Math.max(0, Math.min(100, x));
+    y = Math.max(0, Math.min(100, y));
+
+    gafetesLocales[idSeleccionado].posX = x;
+    gafetesLocales[idSeleccionado].posY = y;
+    document.getElementById('lblX').textContent = Math.round(x);
+    document.getElementById('lblY').textContent = Math.round(y);
+    actualizar();
+  };
+
+  window.onmouseup = () => { dragging = false; };
+
+  function seleccionarGafete(id) {
+    idSeleccionado = id;
+    render();
+  }
+
+  function actualizar() {
+    if (!idSeleccionado) return;
+
+    const tipoIconoVal = document.getElementById('tipoIcono').value;
+    document.getElementById('wrapper-emoji').style.display = (tipoIconoVal === 'emoji') ? 'block' : 'none';
+    document.getElementById('wrapper-imagen').style.display = (tipoIconoVal === 'imagen') ? 'block' : 'none';
+
+    const data = {
+      id: idSeleccionado,
+      nombreGafete: document.getElementById('nombreGafete').value,
+      linea1: document.getElementById('linea1').value,
+      size1: Number(document.getElementById('size1').value),
+      color1: document.getElementById('color1').value,
+      linea2: document.getElementById('linea2').value,
+      size2: Number(document.getElementById('size2').value),
+      color2: document.getElementById('color2').value,
+
+      usarLogo: document.getElementById('usarLogo').checked,
+      tipoIcono: tipoIconoVal,
+      emojiIcono: document.getElementById('emojiIcono').value,
+      logoUrl: document.getElementById('logoUrl').value,
+      logoSize: Number(document.getElementById('logoSize').value),
+      logoPos: document.getElementById('logoPos').value,
+
+      borderRadius: document.getElementById('borderRadius').value,
+      fontFamily: document.getElementById('fontFamily').value,
+      bgColor: document.getElementById('bgColor').value,
+      bgAlpha: Number(document.getElementById('bgAlpha').value),
+      borderColor: document.getElementById('borderColor').value,
+
+      animEntrada: document.getElementById('animEntrada').value,
+      animSalida: document.getElementById('animSalida').value,
+      timerSeconds: Number(document.getElementById('timerSeconds').value),
+      usarCiclo: document.getElementById('usarCiclo').checked,
+      tiempoOculto: Number(document.getElementById('tiempoOculto').value),
+      posX: gafetesLocales[idSeleccionado].posX,
+      posY: gafetesLocales[idSeleccionado].posY
+    };
+
+    socket.emit('guardar-gafete', data);
+  }
+
+  function eliminarActual() {
+    if (idSeleccionado) {
+      socket.emit('eliminar-gafete', idSeleccionado);
+      idSeleccionado = null;
+    }
+  }
+</script>
+</body>
+</html>
