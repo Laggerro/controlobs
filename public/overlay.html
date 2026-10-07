@@ -5,62 +5,48 @@
   <script src="/socket.io/socket.io.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@500;700&family=Montserrat:wght@600;700&family=Impact&display=swap" rel="stylesheet">
   <style>
-    body {
-      background-color: transparent;
-      margin: 0;
-      overflow: hidden;
-      width: 100vw;
-      height: 100vh;
-      position: relative;
-    }
-
-    .gafete-box {
-      position: absolute;
-      padding: 12px 20px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      opacity: 0;
-      box-sizing: border-box;
-      border-style: solid;
-    }
-
-    /* POSICIONES DEL LOGO */
+    body { background-color: transparent; margin: 0; overflow: hidden; width: 100vw; height: 100vh; position: relative; }
+    #container { position: absolute; left: 50%; top: 50%; transform-origin: center; }
+    .gafete-box { position: absolute; padding: 12px 20px; box-shadow: 0 10px 25px rgba(0,0,0,.5); display: flex; align-items: center; gap: 12px; transform: translate(-50%, -50%); pointer-events: none; opacity: 0; box-sizing: border-box; border-style: solid; z-index: 2; }
     .logo-top { flex-direction: column; text-align: center; }
     .logo-bottom { flex-direction: column-reverse; text-align: center; }
     .logo-right { flex-direction: row-reverse; }
     .logo-left { flex-direction: row; }
-
-    /* ESTADOS Y ANIMACIONES */
     .hidden { display: none !important; }
-
-    .in-slideLeft { animation: slideLeftIn 0.5s forwards ease-out; }
-    .in-slideRight { animation: slideRightIn 0.5s forwards ease-out; }
-    .in-slideUp { animation: slideUpIn 0.5s forwards ease-out; }
-    .in-bounce { animation: bounceIn 0.6s forwards cubic-bezier(0.68, -0.55, 0.265, 1.55); }
-    .in-zoom { animation: zoomIn 0.4s forwards ease-out; }
-    .in-fadeIn { animation: fadeIn 0.5s forwards; }
-
-    .out-slideLeft { animation: slideLeftOut 0.5s forwards ease-in; }
-    .out-slideRight { animation: slideRightOut 0.5s forwards ease-in; }
-    .out-slideUp { animation: slideUpOut 0.5s forwards ease-in; }
-    .out-zoom { animation: zoomOut 0.4s forwards ease-in; }
-    .out-fadeOut { animation: fadeOut 0.5s forwards; }
-
+    .in-slideLeft { animation: slideLeftIn .5s forwards ease-out; }
+    .in-slideRight { animation: slideRightIn .5s forwards ease-out; }
+    .in-slideUp { animation: slideUpIn .5s forwards ease-out; }
+    .in-bounce { animation: bounceIn .6s forwards cubic-bezier(.68,-.55,.265,1.55); }
+    .in-zoom { animation: zoomIn .4s forwards ease-out; }
+    .in-fadeIn { animation: fadeIn .5s forwards; }
+    .out-slideLeft { animation: slideLeftOut .5s forwards ease-in; }
+    .out-slideRight { animation: slideRightOut .5s forwards ease-in; }
+    .out-slideUp { animation: slideUpOut .5s forwards ease-in; }
+    .out-zoom { animation: zoomOut .4s forwards ease-in; }
+    .out-fadeOut { animation: fadeOut .5s forwards; }
+    .media-video { position: absolute; transform: translate(-50%, -50%); z-index: 1; opacity: 0; }
+    .media-video-frame { width: 100%; height: 100%; overflow: hidden; border-style: solid; box-sizing: border-box; }
+    .media-video-player { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .media-video-title { position: absolute; left: 50%; transform: translateX(-50%); max-width: 150%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 10px; border-radius: 4px; background: rgba(0,0,0,.75); color: #fff; font: 700 24px system-ui, sans-serif; }
+    .media-video-title.above { bottom: calc(100% + 6px); }
+    .media-video-title.below { top: calc(100% + 6px); }
+    .media-image { position: absolute; transform: translate(-50%, -50%); z-index: 1; opacity: 0; }
+    .media-image-frame { width: 100%; height: 100%; overflow: hidden; border-style: solid; box-sizing: border-box; }
+    .media-image-player { display: block; width: 100%; height: 100%; object-fit: contain; }
+    .media-board { position: absolute; transform: translate(-50%, -50%); z-index: 1; overflow: hidden; }
+    .media-board.has-surface::after { content: ""; position: absolute; inset: 0; border: var(--board-border-width) solid var(--board-border-color); box-sizing: border-box; pointer-events: none; }
+    .media-board-drawing { width: 100%; height: 100%; display: none; }
     @keyframes fadeIn { to { opacity: 1; } }
     @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-    @keyframes slideLeftIn { from { transform: translate(calc(-50% - 150px), -50%); opacity: 0; } to { transform: translate(-50%, -50%); opacity: 1; } }
-    @keyframes slideLeftOut { from { transform: translate(-50%, -50%); opacity: 1; } to { transform: translate(calc(-50% - 150px), -50%); opacity: 0; } }
-    @keyframes slideRightIn { from { transform: translate(calc(-50% + 150px), -50%); opacity: 0; } to { transform: translate(-50%, -50%); opacity: 1; } }
-    @keyframes slideRightOut { from { transform: translate(-50%, -50%); opacity: 1; } to { transform: translate(calc(-50% + 150px), -50%); opacity: 0; } }
-    @keyframes slideUpIn { from { transform: translate(-50%, calc(-50% + 100px)); opacity: 0; } to { transform: translate(-50%, -50%); opacity: 1; } }
-    @keyframes slideUpOut { from { transform: translate(-50%, -50%); opacity: 1; } to { transform: translate(-50%, calc(-50% + 100px)); opacity: 0; } }
-    @keyframes bounceIn { 0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; } 50% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
-    @keyframes zoomIn { from { transform: translate(-50%, -50%) scale(0); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
-    @keyframes zoomOut { from { transform: translate(-50%, -50%) scale(1); opacity: 1; } to { transform: translate(-50%, -50%) scale(0); opacity: 0; } }
+    @keyframes slideLeftIn { from { transform: translate(calc(-50% - 150px),-50%); opacity: 0; } to { transform: translate(-50%,-50%); opacity: 1; } }
+    @keyframes slideLeftOut { from { transform: translate(-50%,-50%); opacity: 1; } to { transform: translate(calc(-50% - 150px),-50%); opacity: 0; } }
+    @keyframes slideRightIn { from { transform: translate(calc(-50% + 150px),-50%); opacity: 0; } to { transform: translate(-50%,-50%); opacity: 1; } }
+    @keyframes slideRightOut { from { transform: translate(-50%,-50%); opacity: 1; } to { transform: translate(calc(-50% + 150px),-50%); opacity: 0; } }
+    @keyframes slideUpIn { from { transform: translate(-50%,calc(-50% + 100px)); opacity: 0; } to { transform: translate(-50%,-50%); opacity: 1; } }
+    @keyframes slideUpOut { from { transform: translate(-50%,-50%); opacity: 1; } to { transform: translate(-50%,calc(-50% + 100px)); opacity: 0; } }
+    @keyframes bounceIn { 0% { transform: translate(-50%,-50%) scale(.3); opacity: 0; } 50% { transform: translate(-50%,-50%) scale(1.05); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1); opacity: 1; } }
+    @keyframes zoomIn { from { transform: translate(-50%,-50%) scale(0); opacity: 0; } to { transform: translate(-50%,-50%) scale(1); opacity: 1; } }
+    @keyframes zoomOut { from { transform: translate(-50%,-50%) scale(1); opacity: 1; } to { transform: translate(-50%,-50%) scale(0); opacity: 0; } }
   </style>
 </head>
 <body>
@@ -68,104 +54,435 @@
 
   <script>
     const socket = io();
+    const container = document.getElementById('container');
+    const audioPlayers = new Map();
+    const videoPlayers = new Map();
+    const videoHideTimers = new Map();
+    const imagePlayers = new Map();
+    const imageHideTimers = new Map();
+    const boardPlayers = new Map();
+    const boardDrawingSources = new Map();
+    let overlaySize = { width: 1920, height: 1080 };
+    let gafetes = {};
 
-    socket.on('sync-gafetes', (gafetes) => {
-      const container = document.getElementById('container');
+    function resizeOverlayCanvas() {
+      const scale = Math.min(window.innerWidth / overlaySize.width, window.innerHeight / overlaySize.height);
+      container.style.width = `${overlaySize.width}px`;
+      container.style.height = `${overlaySize.height}px`;
+      container.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    }
 
+    window.addEventListener('resize', resizeOverlayCanvas);
+    resizeOverlayCanvas();
+
+    socket.on('sync-overlay-size', size => {
+      if (!size || !Number.isInteger(size.width) || !Number.isInteger(size.height)) return;
+      overlaySize = size;
+      resizeOverlayCanvas();
+    });
+
+    function setGafeteStyle(el, g) {
+      el.style.left = `${g.posX || 0}%`;
+      el.style.top = `${g.posY || 0}%`;
+      el.style.borderRadius = g.borderRadius || '12px';
+      el.style.fontFamily = g.fontFamily || 'system-ui, sans-serif';
+      el.style.borderWidth = `${g.borderWidth ?? 2}px`;
+      el.style.borderColor = g.borderColor || '#3b82f6';
+      const color = g.bgColor || '#0f172a';
+      const r = parseInt(color.slice(1, 3), 16);
+      const green = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      el.style.backgroundColor = `rgba(${r}, ${green}, ${b}, ${(g.bgAlpha ?? 85) / 100})`;
+      el.className = el.className.replace(/logo-\w+/g, '');
+      el.classList.add(`logo-${g.logoPos || 'left'}`);
+
+      const l1 = el.querySelector('.g-l1');
+      l1.textContent = g.linea1 || '';
+      l1.style.fontSize = `${g.size1 || 24}px`;
+      l1.style.color = g.color1 || '#ffffff';
+      const l2 = el.querySelector('.g-l2');
+      l2.textContent = g.linea2 || '';
+      l2.style.fontSize = `${g.size2 || 14}px`;
+      l2.style.color = g.color2 || '#cccccc';
+
+      const img = el.querySelector('.g-img');
+      const emoji = el.querySelector('.g-emoji');
+      if (g.usarLogo) {
+        if (g.tipoIcono === 'imagen' && g.logoUrl) {
+          emoji.style.display = 'none';
+          if (img.src !== new URL(g.logoUrl, location.href).href) img.src = g.logoUrl;
+          img.style.display = 'block';
+          img.style.width = `${g.logoSize || 36}px`;
+          img.style.height = `${g.logoSize || 36}px`;
+        } else {
+          img.style.display = 'none';
+          img.removeAttribute('src');
+          emoji.textContent = g.emojiIcono || '🎙️';
+          emoji.style.display = 'inline-block';
+          emoji.style.fontSize = `${g.logoSize || 36}px`;
+          emoji.style.lineHeight = '1';
+        }
+      } else {
+        img.style.display = 'none';
+        emoji.style.display = 'none';
+      }
+    }
+
+    function syncVisibility(el, g) {
+      if (g.visibilidad) {
+        if (!el.classList.contains('is-visible')) {
+          el.classList.remove('hidden', `out-${g.animSalida || 'slideLeft'}`);
+          el.classList.add('is-visible', `in-${g.animEntrada || 'slideLeft'}`);
+        }
+      } else if (el.classList.contains('is-visible')) {
+        el.classList.remove('is-visible', `in-${g.animEntrada || 'slideLeft'}`);
+        el.classList.add(`out-${g.animSalida || 'slideLeft'}`);
+        setTimeout(() => {
+          if (!el.classList.contains('is-visible')) el.classList.add('hidden');
+        }, 500);
+      }
+    }
+
+    socket.on('sync-gafetes', data => {
+      gafetes = data || {};
+      const ids = new Set(Object.keys(gafetes));
+      container.querySelectorAll('.gafete-box').forEach(el => {
+        if (!ids.has(el.dataset.id)) el.remove();
+      });
       Object.values(gafetes).forEach(g => {
         let el = document.getElementById(g.id);
-
         if (!el) {
           el = document.createElement('div');
           el.id = g.id;
+          el.dataset.id = g.id;
           el.className = 'gafete-box hidden';
-          el.innerHTML = `
-            <span class="g-emoji" style="display:none;"></span>
-            <img class="g-img" style="display:none; object-fit:contain;">
-            <div>
-              <div class="g-l1" style="font-weight:800; line-height:1.2;"></div>
-              <div class="g-l2" style="margin-top:2px; line-height:1.2;"></div>
-            </div>
-          `;
+          el.innerHTML = '<span class="g-emoji" style="display:none;"></span><img class="g-img" style="display:none;object-fit:contain;"><div><div class="g-l1" style="font-weight:800;line-height:1.2;"></div><div class="g-l2" style="margin-top:2px;line-height:1.2;"></div></div>';
           container.appendChild(el);
         }
-
-        // Posicionamiento dinámico[cite: 13]
-        el.style.left = (g.posX || 0) + '%';
-        el.style.top = (g.posY || 0) + '%';
-
-        // Estilos CSS dinámicos
-        el.style.borderRadius = g.borderRadius || '12px';
-        el.style.fontFamily = g.fontFamily || 'system-ui, sans-serif';
-        el.style.borderWidth = '2px';
-        el.style.borderColor = g.borderColor || '#3b82f6';
-
-        const r = parseInt((g.bgColor || '#0f172a').slice(1, 3), 16);
-        const gCol = parseInt((g.bgColor || '#0f172a').slice(3, 5), 16);
-        const b = parseInt((g.bgColor || '#0f172a').slice(5, 7), 16);
-        el.style.backgroundColor = `rgba(${r}, ${gCol}, ${b}, ${(g.bgAlpha ?? 85) / 100})`;
-
-        // Alineación de logo
-        el.className = el.className.replace(/logo-\w+/g, '');
-        el.classList.add(`logo-${g.logoPos || 'left'}`);
-
-        // Textos
-        const l1 = el.querySelector('.g-l1');
-        l1.textContent = g.linea1;
-        l1.style.fontSize = (g.size1 || 24) + 'px';
-        l1.style.color = g.color1;
-
-        const l2 = el.querySelector('.g-l2');
-        l2.textContent = g.linea2;
-        l2.style.fontSize = (g.size2 || 14) + 'px';
-        l2.style.color = g.color2;
-
-        // Render de Icono / Emoji / Logo
-        const img = el.querySelector('.g-img');
-        const emoji = el.querySelector('.g-emoji');
-
-        if (g.usarLogo) {
-          if (g.tipoIcono === 'imagen' && g.logoUrl) {
-            emoji.style.display = 'none';
-            if (img.src !== g.logoUrl) img.src = g.logoUrl;
-            img.style.display = 'block';
-            img.style.width = (g.logoSize || 36) + 'px';
-            img.style.height = (g.logoSize || 36) + 'px';
-          } else {
-            img.style.display = 'none';
-            img.removeAttribute('src');
-            emoji.textContent = g.emojiIcono || '🎙️';
-            emoji.style.display = 'inline-block';
-            emoji.style.fontSize = (g.logoSize || 36) + 'px';
-            emoji.style.lineHeight = '1';
-          }
-        } else {
-          img.style.display = 'none';
-          emoji.style.display = 'none';
-        }
-
-        // Lógica de Animación
-        if (g.visibilidad) {
-          if (!el.classList.contains('is-visible')) {
-            el.classList.remove('hidden', `out-${g.animSalida}`);
-            el.classList.add('is-visible', `in-${g.animEntrada}`);
-          }
-        } else {
-          if (el.classList.contains('is-visible')) {
-            el.classList.remove('is-visible', `in-${g.animEntrada}`);
-            el.classList.add(`out-${g.animSalida}`);
-            setTimeout(() => {
-              if (!el.classList.contains('is-visible')) {
-                el.classList.add('hidden');
-              }
-            }, 500);
-          }
-        }
+        setGafeteStyle(el, g);
+        syncVisibility(el, g);
       });
     });
 
-    socket.on('reproducir-sonido', (sonido) => {
-      new Audio(`sonidos/${sonido}.mp3`).play().catch(e => console.error(e));
+    function makeVideoElement(media) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'media-video';
+      wrapper.dataset.id = media.id;
+      const frame = document.createElement('div');
+      frame.className = 'media-video-frame';
+      const player = document.createElement('video');
+      player.className = 'media-video-player';
+      player.playsInline = true;
+      player.preload = 'auto';
+      player.addEventListener('ended', () => socket.emit('media-ended', { tipo: 'video', id: media.id }));
+      player.addEventListener('error', () => {
+        if (player.dataset.active === 'true') {
+          reportMediaError('video', media.id, player.error?.message || 'El navegador no pudo cargar o reproducir el archivo.');
+        }
+      });
+      const title = document.createElement('div');
+      title.className = 'media-video-title';
+      frame.appendChild(player);
+      wrapper.append(frame, title);
+      return wrapper;
+    }
+
+    function makeImageElement(media) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'media-image';
+      wrapper.dataset.id = media.id;
+      const frame = document.createElement('div');
+      frame.className = 'media-image-frame';
+      const image = document.createElement('img');
+      image.className = 'media-image-player';
+      image.addEventListener('error', () => {
+        if (image.dataset.active === 'true') {
+          reportMediaError('imagen', media.id, 'El navegador no pudo cargar el archivo de imagen.');
+        }
+      });
+      const title = document.createElement('div');
+      title.className = 'media-video-title';
+      frame.appendChild(image);
+      wrapper.append(frame, title);
+      return wrapper;
+    }
+
+    function reportMediaError(tipo, id, message) {
+      socket.emit('media-error', { tipo, id, message });
+    }
+
+    function animationClass(el, className) {
+      el.classList.remove('in-slideLeft', 'in-slideRight', 'in-slideUp', 'in-bounce', 'in-zoom', 'in-fadeIn', 'out-slideLeft', 'out-slideRight', 'out-slideUp', 'out-zoom', 'out-fadeOut');
+      void el.offsetWidth;
+      el.classList.add(className);
+    }
+
+    function animationDuration(animation) {
+      return animation === 'zoom' ? 400 : animation === 'bounce' ? 600 : 500;
+    }
+
+    function syncVideo(video) {
+      let el = videoPlayers.get(video.id);
+      if (!el) {
+        el = makeVideoElement(video);
+        el.style.display = 'none';
+        videoPlayers.set(video.id, el);
+        container.appendChild(el);
+      }
+      el.style.left = `${video.posX ?? 50}%`;
+      el.style.top = `${video.posY ?? 50}%`;
+      el.style.width = `${video.ancho || 320}px`;
+      el.style.height = `${video.forma === 'circulo' ? (video.ancho || 320) : (video.alto || 180)}px`;
+      const frame = el.querySelector('.media-video-frame');
+      const shape = video.forma || 'rectangulo';
+      frame.style.borderRadius = shape === 'circulo' ? '50%' : shape === 'redondeado' ? '12px' : '0';
+      frame.style.borderWidth = `${video.anchoBorde ?? 2}px`;
+      frame.style.borderColor = video.colorBorde || '#3b82f6';
+      const player = el.querySelector('video');
+      player.loop = Boolean(video.bucle);
+      player.volume = Math.max(0, Math.min(100, Number(video.volumen ?? 80))) / 100;
+      const title = el.querySelector('.media-video-title');
+      title.textContent = video.titulo || '';
+      title.className = `media-video-title ${video.tituloPos === 'abajo' ? 'below' : 'above'}`;
+      title.style.display = video.titulo ? 'block' : 'none';
+
+      if (video.activo) {
+        const wasActive = player.dataset.active === 'true';
+        const source = `/video/${encodeURIComponent(video.archivo)}`;
+        if (player.dataset.source !== source) {
+          player.dataset.source = source;
+          player.src = source;
+        }
+        const hideTimer = videoHideTimers.get(video.id);
+        if (hideTimer) clearTimeout(hideTimer);
+        videoHideTimers.delete(video.id);
+        el.style.display = 'block';
+        player.dataset.active = 'true';
+        if (!wasActive) animationClass(el, `in-${video.animEntrada || 'fadeIn'}`);
+        if (player.paused) {
+          player.currentTime = 0;
+          player.play().catch(error => reportMediaError('video', video.id, error.message));
+        }
+      } else {
+        const wasActive = player.dataset.active === 'true';
+        player.dataset.active = 'false';
+        player.pause();
+        if (wasActive) {
+          animationClass(el, `out-${video.animSalida || 'fadeOut'}`);
+          const hideTimer = setTimeout(() => {
+            if (player.dataset.active === 'false') {
+              el.style.display = 'none';
+              player.currentTime = 0;
+              el.classList.remove('out-slideLeft', 'out-slideRight', 'out-slideUp', 'out-zoom', 'out-fadeOut');
+            }
+            videoHideTimers.delete(video.id);
+          }, animationDuration(video.animSalida || 'fadeOut'));
+          videoHideTimers.set(video.id, hideTimer);
+        }
+      }
+    }
+
+    function syncImage(image) {
+      let el = imagePlayers.get(image.id);
+      if (!el) {
+        el = makeImageElement(image);
+        el.style.display = 'none';
+        imagePlayers.set(image.id, el);
+        container.appendChild(el);
+      }
+      el.style.left = `${image.posX ?? 50}%`;
+      el.style.top = `${image.posY ?? 50}%`;
+      el.style.width = `${image.ancho || 320}px`;
+      el.style.height = `${image.forma === 'circulo' ? (image.ancho || 320) : (image.alto || 180)}px`;
+      const frame = el.querySelector('.media-image-frame');
+      const shape = image.forma || 'rectangulo';
+      frame.style.borderRadius = shape === 'circulo' ? '50%' : shape === 'redondeado' ? '12px' : '0';
+      frame.style.borderWidth = `${image.anchoBorde ?? 2}px`;
+      frame.style.borderColor = image.colorBorde || '#3b82f6';
+      const player = el.querySelector('img');
+      player.style.borderRadius = shape === 'circulo' ? '50%' : shape === 'redondeado' ? '10px' : '0';
+      const title = el.querySelector('.media-video-title');
+      title.textContent = image.titulo || '';
+      title.className = `media-video-title ${image.tituloPos === 'abajo' ? 'below' : 'above'}`;
+      title.style.display = image.titulo ? 'block' : 'none';
+
+      if (image.activo) {
+        const wasActive = player.dataset.active === 'true';
+        const source = `/Imagenes/${encodeURIComponent(image.archivo)}`;
+        if (player.dataset.source !== source) {
+          player.dataset.source = source;
+          player.src = source;
+        }
+        const hideTimer = imageHideTimers.get(image.id);
+        if (hideTimer) clearTimeout(hideTimer);
+        imageHideTimers.delete(image.id);
+        el.style.display = 'block';
+        player.dataset.active = 'true';
+        if (!wasActive) animationClass(el, `in-${image.animEntrada || 'fadeIn'}`);
+      } else {
+        const wasActive = player.dataset.active === 'true';
+        player.dataset.active = 'false';
+        if (wasActive) {
+          animationClass(el, `out-${image.animSalida || 'fadeOut'}`);
+          const hideTimer = setTimeout(() => {
+            if (player.dataset.active === 'false') {
+              el.style.display = 'none';
+              player.removeAttribute('src');
+              delete player.dataset.source;
+              el.classList.remove('out-slideLeft', 'out-slideRight', 'out-slideUp', 'out-zoom', 'out-fadeOut');
+            }
+            imageHideTimers.delete(image.id);
+          }, animationDuration(image.animSalida || 'fadeOut'));
+          imageHideTimers.set(image.id, hideTimer);
+        }
+      }
+    }
+
+    function syncBoard(board) {
+      let el = boardPlayers.get(board.id);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'media-board';
+        el.dataset.id = board.id;
+        const drawing = document.createElement('canvas');
+        drawing.className = 'media-board-drawing';
+        el.appendChild(drawing);
+        boardPlayers.set(board.id, el);
+        container.appendChild(el);
+      }
+      el.style.left = `${board.posX ?? 50}%`;
+      el.style.top = `${board.posY ?? 50}%`;
+      el.style.width = `${board.ancho || 640}px`;
+      el.style.height = `${board.alto || 360}px`;
+      el.style.setProperty('--board-border-width', `${board.bordeAncho ?? 2}px`);
+      el.style.setProperty('--board-border-color', board.bordeColor || '#38bdf8');
+      const color = board.fondo || '#ffffff';
+      const red = parseInt(color.slice(1, 3), 16);
+      const green = parseInt(color.slice(3, 5), 16);
+      const blue = parseInt(color.slice(5, 7), 16);
+      const backgroundAlpha = Number(board.fondoAlpha ?? 0);
+      el.style.backgroundColor = `rgba(${red}, ${green}, ${blue}, ${backgroundAlpha / 100})`;
+      const drawing = el.querySelector('.media-board-drawing');
+      const drawingSource = board.dibujo || '';
+      el.classList.toggle('has-surface', Boolean(drawingSource) || backgroundAlpha > 0);
+      const width = board.ancho || 640;
+      const height = board.alto || 360;
+      const resized = drawing.width !== width || drawing.height !== height;
+      if (resized) {
+        drawing.width = width;
+        drawing.height = height;
+      }
+      if (resized || boardDrawingSources.get(board.id) !== drawingSource) {
+        boardDrawingSources.set(board.id, drawingSource);
+        if (drawingSource) {
+          drawing.style.display = 'block';
+          const image = new Image();
+          image.onload = () => {
+            if (boardDrawingSources.get(board.id) !== drawingSource) return;
+            const context = drawing.getContext('2d');
+            context.clearRect(0, 0, drawing.width, drawing.height);
+            context.drawImage(image, 0, 0, drawing.width, drawing.height);
+          };
+          image.onerror = () => {
+            if (boardDrawingSources.get(board.id) !== drawingSource) return;
+            drawing.style.display = 'none';
+            el.classList.toggle('has-surface', backgroundAlpha > 0);
+            console.error(`No se pudo cargar el dibujo de la pizarra "${board.nombre || board.id}".`);
+          };
+          image.src = drawingSource;
+        } else {
+          drawing.style.display = 'none';
+          drawing.getContext('2d').clearRect(0, 0, drawing.width, drawing.height);
+        }
+      }
+      el.style.display = board.activo ? 'block' : 'none';
+    }
+
+    function syncAudio(audio) {
+      let player = audioPlayers.get(audio.id);
+      if (!audio.activo) {
+        if (player) {
+          player.dataset.active = 'false';
+          player.pause();
+          if (player.currentTime) player.currentTime = 0;
+        }
+        return;
+      }
+      if (!player) {
+        player = new Audio(`/audio/${encodeURIComponent(audio.archivo)}`);
+        player.addEventListener('ended', () => socket.emit('media-ended', { tipo: 'audio', id: audio.id }));
+        player.addEventListener('error', () => {
+          if (player.dataset.active === 'true') {
+            reportMediaError('audio', audio.id, player.error?.message || 'El navegador no pudo cargar o reproducir el archivo.');
+          }
+        });
+        audioPlayers.set(audio.id, player);
+      }
+      player.dataset.active = 'true';
+      const source = `/audio/${encodeURIComponent(audio.archivo)}`;
+      if (player.dataset.source !== source) {
+        player.dataset.source = source;
+        player.src = source;
+      }
+      player.loop = Boolean(audio.bucle);
+      player.volume = Math.max(0, Math.min(100, Number(audio.volumen ?? 80))) / 100;
+      if (player.paused) {
+        player.currentTime = 0;
+        player.play().catch(error => reportMediaError('audio', audio.id, error.message));
+      }
+    }
+
+    socket.on('sync-medios', data => {
+      const audios = data && data.audios ? data.audios : {};
+      const videos = data && data.videos ? data.videos : {};
+      const images = data && data.imagenes ? data.imagenes : {};
+      const boards = data && data.pizarras ? data.pizarras : {};
+      const audioIds = new Set(Object.keys(audios));
+      const videoIds = new Set(Object.keys(videos));
+      const imageIds = new Set(Object.keys(images));
+      const boardIds = new Set(Object.keys(boards));
+      audioPlayers.forEach((player, id) => {
+        if (!audioIds.has(id)) {
+          player.pause();
+          player.src = '';
+          audioPlayers.delete(id);
+        }
+      });
+      videoPlayers.forEach((el, id) => {
+        if (!videoIds.has(id)) {
+          el.querySelector('video').pause();
+          el.remove();
+          videoPlayers.delete(id);
+          const hideTimer = videoHideTimers.get(id);
+          if (hideTimer) clearTimeout(hideTimer);
+          videoHideTimers.delete(id);
+        }
+      });
+      imagePlayers.forEach((el, id) => {
+        if (!imageIds.has(id)) {
+          el.remove();
+          imagePlayers.delete(id);
+          const hideTimer = imageHideTimers.get(id);
+          if (hideTimer) clearTimeout(hideTimer);
+          imageHideTimers.delete(id);
+        }
+      });
+      boardPlayers.forEach((el, id) => {
+        if (!boardIds.has(id)) {
+          el.remove();
+          boardPlayers.delete(id);
+          boardDrawingSources.delete(id);
+        }
+      });
+      Object.values(videos).forEach(syncVideo);
+      Object.values(images).forEach(syncImage);
+      Object.values(boards).forEach(syncBoard);
+      Object.values(audios).forEach(syncAudio);
+    });
+
+    socket.on('reproducir-sonido', sonido => {
+      const player = new Audio(`sonidos/${encodeURIComponent(sonido)}.mp3`);
+      player.play().catch(error => console.error('No se pudo reproducir el sonido:', error));
     });
   </script>
 </body>

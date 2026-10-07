@@ -20,6 +20,8 @@
   },
   "homepage": "https://github.com/Laggerro/controlobs#readme",
   "dependencies": {
+    "emoji-picker-element": "^1.29.1",
+    "emoji-picker-element-data": "^1.8.0",
     "express": "^5.2.1",
     "socket.io": "^4.8.4"
   }

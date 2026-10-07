@@ -5,340 +5,1068 @@
   <title>Control de Gafetes Pro - OBS</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
+    * { box-sizing: border-box; }
     body { font-family: system-ui, sans-serif; background: #09090b; color: #f4f4f5; margin: 0; padding: 15px; }
-    .layout { display: grid; grid-template-columns: 360px 1fr 280px; gap: 15px; max-width: 1600px; margin: auto; }
-    .card { background: #18181b; padding: 15px; border-radius: 8px; border: 1px solid #27272a; max-height: 90vh; overflow-y: auto; }
+    .layout { display: grid; grid-template-columns: minmax(280px, .72fr) minmax(460px, 1.5fr) minmax(220px, .62fr); gap: 15px; max-width: 1800px; margin: auto; }
+    .card { background: #18181b; padding: 15px; border-radius: 8px; border: 1px solid #27272a; max-height: 92vh; overflow-y: auto; }
     h3 { margin-top: 0; font-size: 15px; border-bottom: 1px solid #27272a; padding-bottom: 8px; color: #3b82f6; }
+    .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .panel-heading h3 { flex: 1; margin-bottom: 12px; }
+    .config-actions { display: flex; gap: 4px; margin-bottom: 8px; }
+    .config-actions button { padding: 6px 8px; font-size: 10px; }
     label { display: block; margin-top: 8px; font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.5px; }
-    input[type="text"], input[type="number"], select { width: 100%; padding: 6px; margin-top: 2px; background: #09090b; border: 1px solid #27272a; color: #fff; border-radius: 4px; box-sizing: border-box; font-size: 13px; }
+    input[type="text"], input[type="number"], select { width: 100%; padding: 6px; margin-top: 2px; background: #09090b; border: 1px solid #27272a; color: #fff; border-radius: 4px; font-size: 13px; }
     input[type="color"] { width: 100%; height: 32px; background: #09090b; border: 1px solid #27272a; border-radius: 4px; cursor: pointer; padding: 2px; }
-    .row { display: flex; gap: 8px; align-items: center; }
+    input[type="range"] { width: 100%; accent-color: #3b82f6; }
+    .row { display: flex; gap: 8px; align-items: end; }
+    .row > * { flex: 1; min-width: 0; }
     .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; cursor: pointer; font-size: 12px; }
     .checkbox-row input { width: auto; cursor: pointer; }
-    button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; font-weight: bold; width: 100%; margin-top: 10px; font-size: 13px; }
-    .btn-red { background: #dc2626; color: white; }
+    button { cursor: pointer; padding: 8px 12px; border: none; border-radius: 4px; font-weight: bold; font-size: 12px; }
     .btn-gray { background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46; }
     .btn-gray.active { background: #16a34a; color: white; border-color: #22c55e; }
+    .btn-gray:disabled { cursor: not-allowed; opacity: .65; }
+    .btn-red { background: #dc2626; color: white; }
+    .create-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin: 8px 0 12px; }
+    .create-actions button { padding: 8px 4px; }
+    .section-title { margin-top: 16px; color: #3b82f6; }
+    .editor { display: none; }
+    .editor.active { display: block; }
+    .hint, .status { font-size: 11px; color: #a1a1aa; }
+    .status { min-height: 15px; margin: 5px 0; }
+    .status.error { color: #fca5a5; }
 
-    /* PREVIO */
-    #stage { width: 100%; aspect-ratio: 16/9; background: #000; background-image: radial-gradient(#27272a 1px, transparent 1px); background-size: 12px 12px; position: relative; border-radius: 6px; overflow: hidden; border: 2px solid #3f3f46; }
-    .prev-box { position: absolute; padding: 8px 14px; border-style: solid; cursor: move; user-select: none; display: flex; gap: 10px; align-items: center; transform: translate(-50%, -50%); max-width: 80%; }
+    #stage { width: 100%; aspect-ratio: 16/9; background: #000; background-image: radial-gradient(#27272a 1px, transparent 1px); background-size: 12px 12px; position: relative; border-radius: 6px; overflow: hidden; box-shadow: inset 0 0 0 2px #3f3f46; }
+    .overlay-size-controls { padding: 0 0 10px; }
+    .overlay-size-controls .row { align-items: end; }
+    .overlay-size-controls .hint { margin-bottom: 0; }
+    .prev-box { position: absolute; padding: 8px 14px; border-style: solid; cursor: move; user-select: none; display: flex; gap: 10px; align-items: center; transform: translate(-50%, -50%); max-width: 80%; z-index: 2; }
     .prev-box.selected { outline: 2px dashed #f59e0b; }
     .prev-box.logo-top { flex-direction: column; text-align: center; }
     .prev-box.logo-bottom { flex-direction: column-reverse; text-align: center; }
     .prev-box.logo-right { flex-direction: row-reverse; }
-    
+    .prev-video { position: absolute; transform: translate(-50%, -50%); z-index: 1; }
+    .prev-video.selected { outline: 2px dashed #f59e0b; outline-offset: 3px; }
+    .prev-video-frame { width: 100%; height: 100%; position: relative; overflow: hidden; border-style: solid; }
+    .prev-video-frame video { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .prev-video-title { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; max-width: 150%; overflow: hidden; text-overflow: ellipsis; padding: 2px 6px; border-radius: 3px; background: rgba(0,0,0,.7); color: white; font-size: 11px; }
+    .prev-video-title.above { bottom: calc(100% + 3px); }
+    .prev-video-title.below { top: calc(100% + 3px); }
+    .prev-image { position: absolute; transform: translate(-50%, -50%); z-index: 1; }
+    .prev-image-frame { width: 100%; height: 100%; position: relative; overflow: hidden; border-style: solid; }
+    .prev-image-frame img { width: 100%; height: 100%; display: block; object-fit: contain; }
+    .prev-board { position: absolute; transform: translate(-50%, -50%); z-index: 2; touch-action: none; }
+    .prev-board::after { content: ""; position: absolute; inset: 0; border: var(--board-border-width) solid var(--board-border-color); box-sizing: border-box; pointer-events: none; }
+    .prev-board.selected { outline: 2px dashed #f59e0b; outline-offset: 2px; }
+    .prev-board img, .prev-board canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .prev-board canvas { touch-action: none; cursor: crosshair; }
+    .board-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 4px; }
+    .board-tool { padding: 7px 4px; background: #27272a; color: #d4d4d8; border: 1px solid #3f3f46; }
+    .board-tool.active { background: #1d4ed8; color: #fff; border-color: #60a5fa; }
+    .media-panels { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    .media-panels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .preview-position { display: flex; gap: 14px; align-items: center; }
+    .preview-position label { margin: 0; }
+    .media-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+    .media-panel { min-width: 0; background: #09090b; border: 1px solid #27272a; border-radius: 6px; padding: 10px; }
+    .media-panel h4 { margin: 0 0 6px; color: #3b82f6; font-size: 12px; }
     .bot-item { margin-bottom: 8px; padding: 10px; background: #09090b; border-radius: 6px; border: 1px solid #27272a; }
+    .media-toggle-row { display: flex; gap: 5px; }
+    .media-toggle-row .btn-gray { flex: 1; min-width: 0; }
+    .delete-item { padding: 7px 9px; }
+    .bot-item.linked-badge { border-color: #7c3aed; background: #1a1026; }
+    .linked-caption { font-size: 10px; color: #c4b5fd; margin: -1px 0 6px; }
+    #botoneraGafetes { display: flex; flex-direction: column; gap: 8px; }
+    #badge-controls { grid-column: 3; grid-row: 1; }
+    .stage-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .stage-item { display: flex; min-width: 0; max-width: 100%; border: 1px solid #3f3f46; border-radius: 5px; overflow: hidden; }
+    .stage-item.selected { border-color: #f59e0b; }
+    .stage-item-select { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 6px 8px; background: #09090b; color: #e4e4e7; }
+    .stage-item-select span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .stage-item .delete-item { border-radius: 0; }
+    .emoji-picker { display: none; margin-top: 6px; border: 1px solid #3f3f46; border-radius: 5px; overflow: hidden; }
+    .emoji-picker.open { display: block; }
+    emoji-picker { width: 100%; height: 310px; --background: #09090b; --border-color: #27272a; --category-emoji-padding: 6px; }
+
+    @media (max-width: 1150px) {
+      .layout { grid-template-columns: minmax(270px, .72fr) minmax(380px, 1.3fr); }
+      #badge-controls { grid-column: 1 / -1; grid-row: auto; }
+      #botoneraGafetes { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    }
+    @media (min-width: 851px) and (max-width: 1150px) {
+      .layout { grid-template-columns: minmax(220px, .72fr) minmax(360px, 1.5fr) minmax(170px, .55fr); }
+      #badge-controls { grid-column: 3; grid-row: 1; }
+      #botoneraGafetes { display: flex; flex-direction: column; }
+    }
+    @media (max-width: 700px) {
+      .layout { display: flex; flex-direction: column; }
+      .card { max-height: none; }
+      .media-panels { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
 <div class="layout">
-
-  <!-- COLUMNA 1: CONFIGURACIÓN -->
   <div class="card">
-    <h3>Editar Gafete</h3>
-    <label>Seleccionar Gafete:</label>
-    <select id="selGafete" onchange="seleccionarGafete(this.value)"></select>
-    <button class="btn-gray" onclick="socket.emit('crear-gafete')">+ Crear Nuevo Gafete</button>
-
-    <label>Nombre Identificador (Panel):</label>
-    <input type="text" id="nombreGafete" oninput="actualizar()">
-
-    <label>Línea 1 (Título):</label>
-    <input type="text" id="linea1" oninput="actualizar()">
-    <div class="row">
-      <input type="number" id="size1" title="Tamaño px" oninput="actualizar()">
-      <input type="color" id="color1" oninput="actualizar()">
+    <div class="panel-heading">
+      <h3>Control y edición</h3>
+      <div class="config-actions">
+        <button class="btn-gray" type="button" title="Exportar configuración JSON" aria-label="Exportar configuración JSON" onclick="exportarConfiguracion()">Exportar</button>
+        <button class="btn-gray" type="button" title="Importar configuración JSON" aria-label="Importar configuración JSON" onclick="document.getElementById('archivoImportarConfig').click()">Importar</button>
+        <button class="btn-red" type="button" title="Empezar una configuración nueva" onclick="nuevaConfiguracion()">Nuevo</button>
+        <input id="archivoImportarConfig" type="file" accept=".json,application/json" hidden onchange="importarConfiguracion(event)">
+      </div>
     </div>
-
-    <label>Línea 2 (Subtítulo):</label>
-    <input type="text" id="linea2" oninput="actualizar()">
-    <div class="row">
-      <input type="number" id="size2" title="Tamaño px" oninput="actualizar()">
-      <input type="color" id="color2" oninput="actualizar()">
+    <div class="create-actions">
+      <button class="btn-gray" onclick="crearElemento('gafete')">+ Gafete</button>
+      <button class="btn-gray" onclick="crearElemento('audio')">+ Audio</button>
+      <button class="btn-gray" onclick="crearElemento('video')">+ Video</button>
+      <button class="btn-gray" onclick="crearElemento('imagen')">+ Imagen</button>
+      <button class="btn-gray" onclick="crearElemento('pizarra')">+ Pizarra</button>
     </div>
+    <button class="btn-gray" style="width:100%;" onclick="actualizarArchivos()">Actualizar lista de archivos</button>
+    <div id="editorStatus" class="status" role="status"></div>
 
-    <!-- ICONO / EMOJI / LOGO -->
-    <label class="checkbox-row">
-      <input type="checkbox" id="usarLogo" onchange="actualizar()">
-      <span><strong>¿Usar Icono / Logo?</strong></span>
-    </label>
-    <div id="sec-logo" style="display:none; padding-left: 10px; border-left: 2px solid #2563eb; margin-top:5px;">
+    <div id="editor-gafete" class="editor">
+      <label>Seleccionar gafete:</label>
+      <div class="row"><select id="selGafete" onchange="seleccionarElemento('gafete', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('gafete')">Eliminar</button></div>
+      <label>Nombre identificador:</label>
+      <input type="text" id="nombreGafete" oninput="guardarGafete()">
+      <label>Línea 1 (título):</label>
+      <input type="text" id="linea1" oninput="guardarGafete()">
       <div class="row">
-        <div>
-          <label>Tipo:</label>
-          <select id="tipoIcono" onchange="actualizar()">
-            <option value="emoji">Emoji de Texto</option>
-            <option value="imagen">URL de Imagen</option>
-          </select>
+        <div><input type="number" id="size1" title="Tamaño px" oninput="guardarGafete()"></div>
+        <div><input type="color" id="color1" oninput="guardarGafete()"></div>
+      </div>
+      <label>Línea 2 (subtítulo):</label>
+      <input type="text" id="linea2" oninput="guardarGafete()">
+      <div class="row">
+        <div><input type="number" id="size2" title="Tamaño px" oninput="guardarGafete()"></div>
+        <div><input type="color" id="color2" oninput="guardarGafete()"></div>
+      </div>
+
+      <label class="checkbox-row"><input type="checkbox" id="usarLogo" onchange="guardarGafete()"><span><strong>¿Usar icono / logo?</strong></span></label>
+      <div id="sec-logo" style="display:none; padding-left:10px; border-left:2px solid #2563eb; margin-top:5px;">
+        <div class="row">
+          <div><label>Tipo:</label><select id="tipoIcono" onchange="guardarGafete()"><option value="emoji">Emoji</option><option value="imagen">URL de imagen</option></select></div>
+          <div><label>Posición:</label><select id="logoPos" onchange="guardarGafete()"><option value="left">Izquierda</option><option value="right">Derecha</option><option value="top">Arriba</option><option value="bottom">Abajo</option></select></div>
         </div>
-        <div>
-          <label>Posición:</label>
-          <select id="logoPos" onchange="actualizar()">
-            <option value="left">Izquierda</option>
-            <option value="right">Derecha</option>
-            <option value="top">Arriba</option>
-            <option value="bottom">Abajo</option>
-          </select>
+        <div id="wrapper-emoji">
+          <label>Emoji / carácter:</label>
+          <div class="row">
+            <input type="text" id="emojiIcono" placeholder="🔥, 🎙️, 🧠" oninput="guardarGafete()">
+            <button type="button" class="btn-gray" id="toggleEmojiPicker" onclick="alternarSelectorEmoji()">Elegir</button>
+          </div>
+          <div class="emoji-picker" id="emojiPicker"></div>
         </div>
+        <div id="wrapper-imagen" style="display:none;">
+          <label>URL de imagen / logo:</label>
+          <input type="text" id="logoUrl" placeholder="/Imagenes/corona.gif o una URL" oninput="guardarGafete()">
+          <p class="hint">Se admiten GIF animados como logo. Usá la ruta /Imagenes/nombre.gif.</p>
+        </div>
+        <label>Tamaño del icono (px):</label><input type="number" id="logoSize" oninput="guardarGafete()">
       </div>
-      <div id="wrapper-emoji">
-        <label>Emoji / Carácter:</label>
-        <input type="text" id="emojiIcono" placeholder="🔥, 🎙️, 🧠, 🎯" oninput="actualizar()">
+
+      <label class="section-title">Estilo del gafete</label>
+      <div class="row">
+        <div><label>Esquinas:</label><select id="borderRadius" onchange="guardarGafete()"><option value="2px">Rectangular</option><option value="12px">Redondeado</option><option value="50px">Píldora</option></select></div>
+        <div><label>Tipografía:</label><select id="fontFamily" onchange="guardarGafete()"><option value="system-ui, sans-serif">Sistema</option><option value="Arial, sans-serif">Arial</option><option value="'Roboto', sans-serif">Roboto</option><option value="'Impact', sans-serif">Impact</option></select></div>
       </div>
-      <div id="wrapper-imagen" style="display:none;">
-        <label>URL Imagen / Logo:</label>
-        <input type="text" id="logoUrl" placeholder="http://... o logo.png" oninput="actualizar()">
+      <div class="row">
+        <div><label>Fondo:</label><input type="color" id="bgColor" oninput="guardarGafete()"></div>
+        <div><label>Opacidad (%):</label><input type="number" id="bgAlpha" min="0" max="100" oninput="guardarGafete()"></div>
+        <div><label>Borde:</label><input type="color" id="borderColor" oninput="guardarGafete()"></div>
       </div>
-      <label>Tamaño (px):</label>
-      <input type="number" id="logoSize" oninput="actualizar()">
+      <label>Grosor del borde (px):</label><input type="number" id="borderWidth" min="0" max="30" step="1" oninput="guardarGafete()">
+
+      <label class="section-title">Animación y tiempo</label>
+      <div class="row">
+        <div><label>Entrada:</label><select id="animEntrada" onchange="guardarGafete()"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="bounce">Rebote</option><option value="zoom">Zoom</option><option value="fadeIn">Fade</option></select></div>
+        <div><label>Salida:</label><select id="animSalida" onchange="guardarGafete()"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="zoom">Zoom</option><option value="fadeOut">Fade</option></select></div>
+      </div>
+      <label>T1: visible (0 = fijo):</label><input type="number" id="timerSeconds" min="0" oninput="guardarGafete()">
+      <label class="checkbox-row"><input type="checkbox" id="usarCiclo" onchange="guardarGafete()"><span><strong>Auto-reaparición</strong></span></label>
+      <label>T2: tiempo oculto (s):</label><input type="number" id="tiempoOculto" min="1" oninput="guardarGafete()">
     </div>
 
-    <!-- ESTILOS DE FORMA Y COLOR -->
-    <label style="margin-top:15px; color:#3b82f6;">Estilo del Gafete (Fondo y Borde)</label>
-    <div class="row">
-      <div>
-        <label>Forma / Esquinas:</label>
-        <select id="borderRadius" onchange="actualizar()">
-          <option value="2px">Rectangular</option>
-          <option value="12px">Redondeado</option>
-          <option value="50px">Píldora</option>
-        </select>
-      </div>
-      <div>
-        <label>Tipografía:</label>
-        <select id="fontFamily" onchange="actualizar()">
-          <option value="system-ui, sans-serif">Sistema</option>
-          <option value="Arial, sans-serif">Arial</option>
-          <option value="'Roboto', sans-serif">Roboto</option>
-          <option value="'Impact', sans-serif">Impact</option>
-        </select>
-      </div>
-    </div>
-    <div class="row">
-      <div><label>Fondo:</label><input type="color" id="bgColor" oninput="actualizar()"></div>
-      <div><label>Opacidad (%):</label><input type="number" id="bgAlpha" min="0" max="100" oninput="actualizar()"></div>
-      <div><label>Borde:</label><input type="color" id="borderColor" oninput="actualizar()"></div>
+    <div id="editor-audio" class="editor">
+      <label>Seleccionar audio:</label>
+      <div class="row"><select id="selAudio" onchange="seleccionarElemento('audio', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('audio')">Eliminar</button></div>
+      <label>Nombre del botón:</label><input type="text" id="audioNombre" oninput="guardarMedia('audio')">
+      <label>Archivo en public/audio:</label><select id="audioArchivo" onchange="guardarMedia('audio')"></select>
+      <p class="hint">Formatos habituales: MP3, WAV, OGG, M4A. Si un M4A falla, su códec puede no ser compatible; probá convertirlo a MP3 o WAV.</p>
+      <label>Gafete vinculado:</label><select id="audioGafete" onchange="guardarMedia('audio')"></select>
+      <label>Volumen: <span id="audioVolumenLabel">80%</span></label>
+      <input type="range" id="audioVolumen" min="0" max="100" value="80" oninput="actualizarEtiquetaVolumen('audio'); guardarMedia('audio')">
+      <label class="checkbox-row"><input type="checkbox" id="audioBucle" onchange="guardarMedia('audio')"><span>Reproducir en bucle</span></label>
     </div>
 
-    <!-- ANIMACIONES -->
-    <label style="margin-top:15px; color:#3b82f6;">Animaciones y Tiempo</label>
-    <div class="row">
-      <div>
-        <label>Entrada:</label>
-        <select id="animEntrada" onchange="actualizar()">
-          <option value="slideLeft">Deslizar Izq</option>
-          <option value="slideRight">Deslizar Der</option>
-          <option value="slideUp">Deslizar Arriba</option>
-          <option value="bounce">Rebote</option>
-          <option value="zoom">Zoom</option>
-          <option value="fadeIn">Fade</option>
-        </select>
+    <div id="editor-video" class="editor">
+      <label>Seleccionar video:</label>
+      <div class="row"><select id="selVideo" onchange="seleccionarElemento('video', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('video')">Eliminar</button></div>
+      <label>Nombre del botón:</label><input type="text" id="videoNombre" oninput="guardarMedia('video')">
+      <label>Archivo en public/video:</label><select id="videoArchivo" onchange="guardarMedia('video')"></select>
+      <p class="hint">Formatos habituales: MP4, WebM, OGV.</p>
+      <label>Gafete vinculado:</label><select id="videoGafete" onchange="guardarMedia('video')"></select>
+      <label>Volumen: <span id="videoVolumenLabel">80%</span></label>
+      <input type="range" id="videoVolumen" min="0" max="100" value="80" oninput="actualizarEtiquetaVolumen('video'); guardarMedia('video')">
+      <label class="checkbox-row"><input type="checkbox" id="videoBucle" onchange="guardarMedia('video')"><span>Reproducir en bucle</span></label>
+      <label class="section-title">Apariencia en el previo</label>
+      <div class="row">
+        <div><label>Entrada:</label><select id="videoAnimEntrada" onchange="guardarMedia('video')"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="bounce">Rebote</option><option value="zoom">Zoom</option><option value="fadeIn">Fade</option></select></div>
+        <div><label>Salida:</label><select id="videoAnimSalida" onchange="guardarMedia('video')"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="zoom">Zoom</option><option value="fadeOut">Fade</option></select></div>
       </div>
-      <div>
-        <label>Salida:</label>
-        <select id="animSalida" onchange="actualizar()">
-          <option value="slideLeft">Deslizar Izq</option>
-          <option value="slideRight">Deslizar Der</option>
-          <option value="slideUp">Deslizar Arriba</option>
-          <option value="zoom">Zoom</option>
-          <option value="fadeOut">Fade</option>
-        </select>
+      <label>Título sobre el video:</label><input type="text" id="videoTitulo" oninput="guardarMedia('video')">
+      <label>Ubicación del título:</label><select id="videoTituloPos" onchange="guardarMedia('video')"><option value="arriba">Arriba</option><option value="abajo">Abajo</option></select>
+      <div class="row">
+        <div><label>Ancho (px):</label><input type="number" id="videoAncho" min="40" max="1920" oninput="guardarMedia('video')"></div>
+        <div><label>Alto (px):</label><input type="number" id="videoAlto" min="40" max="1080" oninput="guardarMedia('video')"></div>
       </div>
+      <div class="row">
+        <div><label>Forma:</label><select id="videoForma" onchange="guardarMedia('video')"><option value="rectangulo">Rectángulo</option><option value="redondeado">Redondeado</option><option value="circulo">Círculo</option></select></div>
+        <div><label>Color del borde:</label><input type="color" id="videoColorBorde" oninput="guardarMedia('video')"></div>
+      </div>
+      <label>Grosor del borde (px):</label><input type="number" id="videoAnchoBorde" min="0" max="30" oninput="guardarMedia('video')">
+      <p class="hint">Arrastrá el video en el previo para ubicarlo. Los gafetes se muestran por delante.</p>
     </div>
 
-    <!-- TIEMPOS -->
-    <label>T1: Tiempo Visible (0 = Mantiene Fijo):</label>
-    <input type="number" id="timerSeconds" min="0" oninput="actualizar()">
+    <div id="editor-imagen" class="editor">
+      <label>Seleccionar imagen:</label>
+      <div class="row"><select id="selImagen" onchange="seleccionarElemento('imagen', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('imagen')">Eliminar</button></div>
+      <label>Nombre del botón:</label><input type="text" id="imagenNombre" oninput="guardarMedia('imagen')">
+      <label>Archivo en public/Imagenes:</label><select id="imagenArchivo" onchange="guardarMedia('imagen')"></select>
+      <p class="hint">Admite GIF animado, PNG, JPG, WebP y BMP.</p>
+      <label>Audio vinculado (opcional):</label><select id="imagenAudio" onchange="guardarMedia('imagen')"></select>
+      <label>Gafete vinculado (opcional):</label><select id="imagenGafete" onchange="guardarMedia('imagen')"></select>
+      <div class="row">
+        <div><label>Entrada:</label><select id="imagenAnimEntrada" onchange="guardarMedia('imagen')"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="bounce">Rebote</option><option value="zoom">Zoom</option><option value="fadeIn">Fade</option></select></div>
+        <div><label>Salida:</label><select id="imagenAnimSalida" onchange="guardarMedia('imagen')"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="zoom">Zoom</option><option value="fadeOut">Fade</option></select></div>
+      </div>
+      <label>Título:</label><input type="text" id="imagenTitulo" oninput="guardarMedia('imagen')">
+      <label>Ubicación del título:</label><select id="imagenTituloPos" onchange="guardarMedia('imagen')"><option value="arriba">Arriba</option><option value="abajo">Abajo</option></select>
+      <div class="row">
+        <div><label>Ancho (px):</label><input type="number" id="imagenAncho" min="40" max="1920" oninput="guardarMedia('imagen')"></div>
+        <div><label>Alto (px):</label><input type="number" id="imagenAlto" min="40" max="1080" oninput="guardarMedia('imagen')"></div>
+      </div>
+      <div class="row">
+        <div><label>Forma:</label><select id="imagenForma" onchange="guardarMedia('imagen')"><option value="rectangulo">Rectángulo</option><option value="redondeado">Redondeado</option><option value="circulo">Círculo</option></select></div>
+        <div><label>Color del borde:</label><input type="color" id="imagenColorBorde" oninput="guardarMedia('imagen')"></div>
+      </div>
+      <label>Grosor del borde (px):</label><input type="number" id="imagenAnchoBorde" min="0" max="30" oninput="guardarMedia('imagen')">
+      <p class="hint">Arrastrá la imagen en el previo. Al vincular un audio, el botón de imagen inicia ambos y se ocultan al detener o terminar el audio.</p>
+    </div>
 
-    <label class="checkbox-row">
-      <input type="checkbox" id="usarCiclo" onchange="actualizar()">
-      <span><strong>Habilitar Bucle (Auto-Reaparición)</strong></span>
-    </label>
-    <label>T2: Tiempo Oculto en Bucle (s):</label>
-    <input type="number" id="tiempoOculto" min="1" oninput="actualizar()">
-
-    <button class="btn-red" style="margin-top:20px;" onclick="eliminarActual()">Eliminar Gafete</button>
+    <div id="editor-pizarra" class="editor">
+      <label>Seleccionar pizarra:</label>
+      <div class="row"><select id="selPizarra" onchange="seleccionarElemento('pizarra', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('pizarra')">Eliminar</button></div>
+      <label>Nombre:</label><input type="text" id="pizarraNombre" oninput="guardarPizarra()">
+      <div class="row">
+        <div><label>Ancho (px):</label><input type="number" id="pizarraAncho" min="40" max="1920" oninput="guardarPizarra()"></div>
+        <div><label>Alto (px):</label><input type="number" id="pizarraAlto" min="40" max="1080" oninput="guardarPizarra()"></div>
+      </div>
+      <div class="row">
+        <div><label>Fondo:</label><input type="color" id="pizarraFondo" oninput="guardarPizarra()"></div>
+        <div><label>Opacidad (%):</label><input type="number" id="pizarraFondoAlpha" min="0" max="100" oninput="guardarPizarra()"></div>
+      </div>
+      <div class="row">
+        <div><label>Color del borde:</label><input type="color" id="pizarraBordeColor" oninput="guardarPizarra()"></div>
+        <div><label>Grosor del borde (px):</label><input type="number" id="pizarraBordeAncho" min="0" max="30" step="1" oninput="guardarPizarra()"></div>
+      </div>
+      <label>Herramienta para dibujar:</label>
+      <div class="board-tools" role="toolbar" aria-label="Herramientas de pizarra">
+        <button class="board-tool active" type="button" data-board-tool="mover" aria-pressed="true" onclick="actualizarHerramientaPizarra('mover')">↖ Mover</button>
+        <button class="board-tool" type="button" data-board-tool="lapiz" aria-pressed="false" onclick="actualizarHerramientaPizarra('lapiz')">✎ Lápiz</button>
+        <button class="board-tool" type="button" data-board-tool="linea" aria-pressed="false" onclick="actualizarHerramientaPizarra('linea')">╱ Línea</button>
+        <button class="board-tool" type="button" data-board-tool="rectangulo" aria-pressed="false" onclick="actualizarHerramientaPizarra('rectangulo')">□ Rectángulo</button>
+        <button class="board-tool" type="button" data-board-tool="circulo" aria-pressed="false" onclick="actualizarHerramientaPizarra('circulo')">○ Círculo</button>
+        <button class="board-tool" type="button" data-board-tool="borrador" aria-pressed="false" onclick="actualizarHerramientaPizarra('borrador')">⌫ Borrador</button>
+      </div>
+      <div class="row">
+        <div><label>Color del trazo:</label><input type="color" id="pizarraColor" value="#ffffff"></div>
+        <div><label>Grosor (px):</label><input type="number" id="pizarraGrosor" min="1" max="80" value="6"></div>
+      </div>
+      <button class="btn-red" style="margin-top:10px;width:100%;" onclick="limpiarPizarra()">Limpiar dibujo</button>
+      <p class="hint">Elegí una herramienta y dibujá directamente sobre la pizarra en el previo. En OBS se conserva la transparencia y el color de fondo elegidos.</p>
+    </div>
   </div>
 
-  <!-- COLUMNA 2: PREVIO -->
   <div class="card">
-    <h3>Previo Interactivo (Arrastra para Ubicar)</h3>
+    <h3>Previo de escena</h3>
+    <div class="overlay-size-controls">
+      <label for="overlayPreset">Resolución del overlay / lienzo:</label>
+      <select id="overlayPreset" onchange="cambiarPresetOverlay()">
+        <option value="1920x1080">1920 × 1080 — Full HD (16:9)</option>
+        <option value="1280x720">1280 × 720 — HD (16:9)</option>
+        <option value="2560x1440">2560 × 1440 — QHD (16:9)</option>
+        <option value="1440x1080">1440 × 1080 — 4:3</option>
+        <option value="1080x1080">1080 × 1080 — Cuadrado (1:1)</option>
+        <option value="1080x1920">1080 × 1920 — Vertical (9:16)</option>
+        <option value="custom">Personalizada</option>
+      </select>
+      <div id="customOverlaySize" class="row" style="display:none;">
+        <div><label for="overlayWidth">Ancho (px):</label><input id="overlayWidth" type="number" min="320" max="3840" step="1"></div>
+        <div><label for="overlayHeight">Alto (px):</label><input id="overlayHeight" type="number" min="240" max="2160" step="1"></div>
+        <button class="btn-gray" type="button" onclick="aplicarTamanoOverlay()">Aplicar</button>
+      </div>
+      <p id="overlayAspectRatio" class="hint"></p>
+      <p class="hint">Configurá la fuente Navegador de OBS con estas mismas dimensiones. El previo escala los objetos según esta resolución.</p>
+    </div>
     <div id="stage"></div>
-    <div class="row" style="margin-top:8px;">
+    <label class="checkbox-row"><input type="checkbox" id="bloquearMovimiento"><span>Bloquear movimiento en el previo</span></label>
+    <div class="preview-position">
       <label>Pos X (%): <span id="lblX">0</span></label>
       <label>Pos Y (%): <span id="lblY">0</span></label>
     </div>
+    <label>Seleccionar elemento para editar o eliminar:</label>
+    <div id="stageItems" class="stage-items"></div>
+    <div class="media-panels">
+      <section class="media-panel"><h4>Botonera de audio</h4><div id="botoneraAudio"></div></section>
+      <section class="media-panel"><h4>Botonera de video</h4><div id="botoneraVideo"></div></section>
+      <section class="media-panel"><h4>Botonera de imágenes</h4><div id="botoneraImagen"></div></section>
+      <section class="media-panel"><h4>Botonera de pizarras</h4><div id="botoneraPizarra"></div></section>
+    </div>
   </div>
 
-  <!-- COLUMNA 3: BOTONERA DE CONTROL -->
-  <div class="card">
-    <h3>Botonera de Transmisión</h3>
-    <p style="font-size: 11px; color: #a1a1aa; margin-top:-5px;">Presiona para activar u ocultar de forma independiente cada gafete en OBS.</p>
-    <div id="botonera"></div>
+  <div class="card" id="badge-controls">
+    <h3>Botonera de gafetes</h3>
+    <p class="hint">Activá u ocultá cada gafete de forma independiente.</p>
+    <div id="botoneraGafetes"></div>
   </div>
-
 </div>
 
 <script>
   const socket = io();
-  let gafetesLocales = {};
+  const elementos = { gafete: {}, audio: {}, video: {}, imagen: {}, pizarra: {} };
+  const archivos = { audio: [], video: [], imagen: [] };
+  let overlaySize = { width: 1920, height: 1080 };
+  let tipoSeleccionado = null;
   let idSeleccionado = null;
+  let herramientaPizarra = 'mover';
   let dragging = false;
+  let positionSaveTimer = null;
+  let dibujoActivo = null;
+  const boardDrawingSources = new WeakMap();
 
-  socket.on('sync-gafetes', (data) => {
-    gafetesLocales = data;
-    const keys = Object.keys(data);
-    if (keys.length > 0 && (!idSeleccionado || !gafetesLocales[idSeleccionado])) {
-      idSeleccionado = keys[0];
-    }
+  function collection(type) {
+    return type === 'gafete' ? elementos.gafete : elementos[type];
+  }
+
+  function selectId(type) {
+    return type === 'gafete' ? 'selGafete'
+      : type === 'audio' ? 'selAudio'
+        : type === 'video' ? 'selVideo'
+          : type === 'imagen' ? 'selImagen'
+            : 'selPizarra';
+  }
+
+  function entity(type) {
+    if (!type || !idSeleccionado || tipoSeleccionado !== type) return null;
+    return collection(type)[idSeleccionado] || null;
+  }
+
+  socket.on('sync-gafetes', data => {
+    elementos.gafete = data || {};
+    maintainSelection();
     render();
   });
+  socket.on('sync-medios', data => {
+    elementos.audio = data && data.audios ? data.audios : {};
+    elementos.video = data && data.videos ? data.videos : {};
+    elementos.imagen = data && data.imagenes ? data.imagenes : {};
+    elementos.pizarra = data && data.pizarras ? data.pizarras : {};
+    maintainSelection();
+    render();
+  });
+  socket.on('sync-overlay-size', size => {
+    overlaySize = size && Number.isInteger(size.width) && Number.isInteger(size.height)
+      ? size
+      : { width: 1920, height: 1080 };
+    actualizarControlesTamanoOverlay();
+    renderStage();
+  });
+  socket.on('elemento-creado', ({ tipo, id }) => {
+    tipoSeleccionado = tipo;
+    idSeleccionado = id;
+    render();
+  });
+  socket.on('error-control', message => setStatus(message, true));
+  socket.on('media-error', data => {
+    setStatus(`No se pudo reproducir ${data.tipo}: ${data.message}`, true);
+  });
+
+  function maintainSelection() {
+    if (tipoSeleccionado && idSeleccionado && collection(tipoSeleccionado)[idSeleccionado]) return;
+    const firstBadge = Object.keys(elementos.gafete)[0];
+    const firstAudio = Object.keys(elementos.audio)[0];
+    const firstVideo = Object.keys(elementos.video)[0];
+    const firstImage = Object.keys(elementos.imagen)[0];
+    const firstBoard = Object.keys(elementos.pizarra)[0];
+    if (firstBadge) {
+      tipoSeleccionado = 'gafete';
+      idSeleccionado = firstBadge;
+    } else if (firstAudio) {
+      tipoSeleccionado = 'audio';
+      idSeleccionado = firstAudio;
+    } else if (firstVideo) {
+      tipoSeleccionado = 'video';
+      idSeleccionado = firstVideo;
+    } else if (firstImage) {
+      tipoSeleccionado = 'imagen';
+      idSeleccionado = firstImage;
+    } else if (firstBoard) {
+      tipoSeleccionado = 'pizarra';
+      idSeleccionado = firstBoard;
+    } else {
+      tipoSeleccionado = null;
+      idSeleccionado = null;
+    }
+  }
+
+  function setValue(id, value) {
+    const input = document.getElementById(id);
+    if (input && document.activeElement !== input) input.value = value ?? '';
+  }
+
+  function setChecked(id, checked) {
+    const input = document.getElementById(id);
+    if (input && document.activeElement !== input) input.checked = Boolean(checked);
+  }
+
+  function renderSelect(type) {
+    const select = document.getElementById(selectId(type));
+    const current = type === tipoSeleccionado ? idSeleccionado : select.value;
+    select.innerHTML = '';
+    Object.values(collection(type)).forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = type === 'gafete' ? (item.nombreGafete || item.id) : (item.nombre || item.id);
+      select.appendChild(option);
+    });
+    if (collection(type)[current]) select.value = current;
+  }
+
+  function populateFileSelect(type) {
+    const select = document.getElementById(`${type}Archivo`);
+    const selected = entity(type)?.archivo;
+    select.innerHTML = '';
+    archivos[type].forEach(file => {
+      const option = document.createElement('option');
+      option.value = file.nombre;
+      option.textContent = file.nombre;
+      select.appendChild(option);
+    });
+    if (selected && archivos[type].some(file => file.nombre === selected)) select.value = selected;
+  }
+
+  function populateBadgeSelect(type) {
+    const media = entity(type);
+    const select = document.getElementById(`${type}Gafete`);
+    select.innerHTML = '';
+    const unlinked = document.createElement('option');
+    unlinked.value = '';
+    unlinked.textContent = 'Sin gafete vinculado';
+    select.appendChild(unlinked);
+    Object.values(elementos.gafete).forEach(badge => {
+      const option = document.createElement('option');
+      option.value = badge.id;
+      const controller = [...Object.values(elementos.audio), ...Object.values(elementos.video), ...Object.values(elementos.imagen)]
+        .find(item => item.id !== media.id && item.gafeteId === badge.id);
+      option.textContent = controller
+        ? `${badge.nombreGafete || badge.id} (ocupado por ${controller.nombre || controller.id})`
+        : badge.nombreGafete || badge.id;
+      option.disabled = Boolean(controller);
+      select.appendChild(option);
+    });
+    setValue(`${type}Gafete`, media.gafeteId || '');
+  }
+
+  function populateImageAudioSelect(image) {
+    const select = document.getElementById('imagenAudio');
+    select.innerHTML = '';
+    const unlinked = document.createElement('option');
+    unlinked.value = '';
+    unlinked.textContent = 'Sin audio vinculado';
+    select.appendChild(unlinked);
+    Object.values(elementos.audio).forEach(audio => {
+      const linkedImage = Object.values(elementos.imagen)
+        .find(item => item.id !== image.id && item.audioId === audio.id);
+      const option = document.createElement('option');
+      option.value = audio.id;
+      option.textContent = linkedImage
+        ? `${audio.nombre || audio.id} (ocupado por ${linkedImage.nombre || linkedImage.id})`
+        : audio.nombre || audio.id;
+      option.disabled = Boolean(linkedImage);
+      select.appendChild(option);
+    });
+    setValue('imagenAudio', image.audioId || '');
+  }
 
   function render() {
-    const sel = document.getElementById('selGafete');
-    sel.innerHTML = '';
-    Object.values(gafetesLocales).forEach(g => {
-      const opt = document.createElement('option');
-      opt.value = g.id;
-      opt.textContent = g.nombreGafete || g.id;
-      if (g.id === idSeleccionado) opt.selected = true;
-      sel.appendChild(opt);
+    ['gafete', 'audio', 'video', 'imagen', 'pizarra'].forEach(renderSelect);
+    ['gafete', 'audio', 'video', 'imagen', 'pizarra'].forEach(type => {
+      document.getElementById(`editor-${type}`).classList.toggle('active', type === tipoSeleccionado);
     });
-
-    const g = gafetesLocales[idSeleccionado];
-    if (g) {
-      document.getElementById('nombreGafete').value = g.nombreGafete || '';
-      document.getElementById('linea1').value = g.linea1 || '';
-      document.getElementById('size1').value = g.size1 || 24;
-      document.getElementById('color1').value = g.color1 || '#ffffff';
-      document.getElementById('linea2').value = g.linea2 || '';
-      document.getElementById('size2').value = g.size2 || 14;
-      document.getElementById('color2').value = g.color2 || '#cccccc';
-
-      document.getElementById('usarLogo').checked = !!g.usarLogo;
-      document.getElementById('sec-logo').style.display = g.usarLogo ? 'block' : 'none';
-      document.getElementById('tipoIcono').value = g.tipoIcono || 'emoji';
-      document.getElementById('emojiIcono').value = g.emojiIcono || '🎙️';
-      document.getElementById('logoUrl').value = g.logoUrl || '';
-      document.getElementById('logoSize').value = g.logoSize || 36;
-      document.getElementById('logoPos').value = g.logoPos || 'left';
-
-      document.getElementById('wrapper-emoji').style.display = (g.tipoIcono === 'emoji') ? 'block' : 'none';
-      document.getElementById('wrapper-imagen').style.display = (g.tipoIcono === 'imagen') ? 'block' : 'none';
-
-      document.getElementById('borderRadius').value = g.borderRadius || '12px';
-      document.getElementById('fontFamily').value = g.fontFamily || 'system-ui, sans-serif';
-      document.getElementById('bgColor').value = g.bgColor || '#0f172a';
-      document.getElementById('bgAlpha').value = g.bgAlpha ?? 85;
-      document.getElementById('borderColor').value = g.borderColor || '#3b82f6';
-
-      document.getElementById('animEntrada').value = g.animEntrada || 'slideLeft';
-      document.getElementById('animSalida').value = g.animSalida || 'slideLeft';
-      document.getElementById('timerSeconds').value = g.timerSeconds ?? 0;
-      document.getElementById('usarCiclo').checked = !!g.usarCiclo;
-      document.getElementById('tiempoOculto').value = g.tiempoOculto || 3;
-
-      document.getElementById('lblX').textContent = Math.round(g.posX || 0);
-      document.getElementById('lblY').textContent = Math.round(g.posY || 0);
+    if (tipoSeleccionado && idSeleccionado) {
+      const select = document.getElementById(selectId(tipoSeleccionado));
+      if (select) select.value = idSeleccionado;
     }
 
-    // PREVIO
-    const stage = document.getElementById('stage');
-    stage.innerHTML = '';
-    Object.values(gafetesLocales).forEach(item => {
-      const box = document.createElement('div');
-      box.className = `prev-box logo-${item.logoPos || 'left'} ${item.id === idSeleccionado ? 'selected' : ''}`;
-      box.style.left = (item.posX || 0) + '%';
-      box.style.top = (item.posY || 0) + '%';
-      box.style.borderRadius = item.borderRadius || '12px';
-      box.style.fontFamily = item.fontFamily || 'sans-serif';
-      box.style.borderWidth = '2px';
-      box.style.borderColor = item.borderColor || '#3b82f6';
-      
-      const r = parseInt((item.bgColor || '#0f172a').slice(1, 3), 16);
-      const g = parseInt((item.bgColor || '#0f172a').slice(3, 5), 16);
-      const b = parseInt((item.bgColor || '#0f172a').slice(5, 7), 16);
-      box.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${(item.bgAlpha ?? 85) / 100})`;
+    const g = entity('gafete');
+    if (g) renderBadgeEditor(g);
+    const a = entity('audio');
+    if (a) renderAudioEditor(a);
+    const v = entity('video');
+    if (v) renderVideoEditor(v);
+    const image = entity('imagen');
+    if (image) renderImageEditor(image);
+    const board = entity('pizarra');
+    if (board) renderPizarraEditor(board);
+    renderStage();
+    renderButtons();
+    updatePositionLabels();
+  }
 
-      let iconHtml = '';
-      if (item.usarLogo) {
-        if (item.tipoIcono === 'imagen' && item.logoUrl) {
-          iconHtml = `<img src="${item.logoUrl}" style="width:${(item.logoSize||36)/2}px; height:${(item.logoSize||36)/2}px; object-fit:contain;">`;
-        } else {
-          iconHtml = `<span style="font-size:${(item.logoSize||36)/1.8}px; line-height:1;">${item.emojiIcono || '🎙️'}</span>`;
-        }
+  function renderBadgeEditor(g) {
+    setValue('nombreGafete', g.nombreGafete);
+    setValue('linea1', g.linea1);
+    setValue('size1', g.size1 ?? 24);
+    setValue('color1', g.color1 || '#ffffff');
+    setValue('linea2', g.linea2);
+    setValue('size2', g.size2 ?? 14);
+    setValue('color2', g.color2 || '#cccccc');
+    setChecked('usarLogo', g.usarLogo);
+    document.getElementById('sec-logo').style.display = g.usarLogo ? 'block' : 'none';
+    setValue('tipoIcono', g.tipoIcono || 'emoji');
+    setValue('emojiIcono', g.emojiIcono || '🎙️');
+    setValue('logoUrl', g.logoUrl);
+    setValue('logoSize', g.logoSize || 36);
+    setValue('logoPos', g.logoPos || 'left');
+    document.getElementById('wrapper-emoji').style.display = (g.tipoIcono || 'emoji') === 'emoji' ? 'block' : 'none';
+    document.getElementById('wrapper-imagen').style.display = g.tipoIcono === 'imagen' ? 'block' : 'none';
+    setValue('borderRadius', g.borderRadius || '12px');
+    setValue('fontFamily', g.fontFamily || 'system-ui, sans-serif');
+    setValue('bgColor', g.bgColor || '#0f172a');
+    setValue('bgAlpha', g.bgAlpha ?? 85);
+    setValue('borderColor', g.borderColor || '#3b82f6');
+    setValue('borderWidth', g.borderWidth ?? 2);
+    setValue('animEntrada', g.animEntrada || 'slideLeft');
+    setValue('animSalida', g.animSalida || 'slideLeft');
+    setValue('timerSeconds', g.timerSeconds ?? 0);
+    setChecked('usarCiclo', g.usarCiclo);
+    setValue('tiempoOculto', g.tiempoOculto ?? 3);
+  }
+
+  function renderAudioEditor(audio) {
+    setValue('audioNombre', audio.nombre);
+    setValue('audioVolumen', audio.volumen ?? 80);
+    setChecked('audioBucle', audio.bucle);
+    populateFileSelect('audio');
+    populateBadgeSelect('audio');
+    actualizarEtiquetaVolumen('audio');
+  }
+
+  function renderVideoEditor(video) {
+    setValue('videoNombre', video.nombre);
+    setValue('videoVolumen', video.volumen ?? 80);
+    setChecked('videoBucle', video.bucle);
+    setValue('videoTitulo', video.titulo);
+    setValue('videoTituloPos', video.tituloPos || 'arriba');
+    setValue('videoAncho', video.ancho ?? 320);
+    setValue('videoAlto', video.alto ?? 180);
+    setValue('videoForma', video.forma || 'rectangulo');
+    setValue('videoColorBorde', video.colorBorde || '#3b82f6');
+    setValue('videoAnchoBorde', video.anchoBorde ?? 2);
+    setValue('videoAnimEntrada', video.animEntrada || 'fadeIn');
+    setValue('videoAnimSalida', video.animSalida || 'fadeOut');
+    populateFileSelect('video');
+    populateBadgeSelect('video');
+    actualizarEtiquetaVolumen('video');
+  }
+
+  function renderImageEditor(image) {
+    setValue('imagenNombre', image.nombre);
+    setValue('imagenTitulo', image.titulo);
+    setValue('imagenTituloPos', image.tituloPos || 'arriba');
+    setValue('imagenAncho', image.ancho ?? 320);
+    setValue('imagenAlto', image.alto ?? 180);
+    setValue('imagenForma', image.forma || 'rectangulo');
+    setValue('imagenColorBorde', image.colorBorde || '#3b82f6');
+    setValue('imagenAnchoBorde', image.anchoBorde ?? 2);
+    setValue('imagenAnimEntrada', image.animEntrada || 'fadeIn');
+    setValue('imagenAnimSalida', image.animSalida || 'fadeOut');
+    populateFileSelect('imagen');
+    populateBadgeSelect('imagen');
+    populateImageAudioSelect(image);
+  }
+
+  function renderPizarraEditor(board) {
+    setValue('pizarraNombre', board.nombre);
+    setValue('pizarraAncho', board.ancho ?? 640);
+    setValue('pizarraAlto', board.alto ?? 360);
+    setValue('pizarraFondo', board.fondo || '#ffffff');
+    setValue('pizarraFondoAlpha', board.fondoAlpha ?? 0);
+    setValue('pizarraBordeColor', board.bordeColor || '#38bdf8');
+    setValue('pizarraBordeAncho', board.bordeAncho ?? 2);
+    actualizarHerramientaPizarra();
+  }
+
+  function styleBadge(box, item, preview) {
+    const scale = preview ? escalaPrevio() : 1;
+    box.style.left = `${item.posX || 0}%`;
+    box.style.top = `${item.posY || 0}%`;
+    const borderRadius = Number.parseFloat(item.borderRadius) || 0;
+    box.style.borderRadius = `${borderRadius * scale}px`;
+    box.style.fontFamily = item.fontFamily || 'sans-serif';
+    box.style.borderWidth = `${(item.borderWidth ?? 2) * scale}px`;
+    box.style.borderColor = item.borderColor || '#3b82f6';
+    box.style.backgroundColor = colorWithAlpha(item.bgColor || '#0f172a', item.bgAlpha ?? 85);
+    box.style.padding = `${8 * scale}px ${14 * scale}px`;
+    box.style.gap = `${10 * scale}px`;
+    box.className = `prev-box logo-${item.logoPos || 'left'} ${item.id === idSeleccionado && tipoSeleccionado === 'gafete' ? 'selected' : ''}`;
+    box.dataset.kind = 'gafete';
+    box.dataset.id = item.id;
+    const icon = item.usarLogo
+      ? item.tipoIcono === 'imagen' && item.logoUrl
+        ? `<img src="${escapeAttribute(item.logoUrl)}" style="width:${(item.logoSize || 36) * scale}px;height:${(item.logoSize || 36) * scale}px;object-fit:contain;">`
+        : `<span style="font-size:${(item.logoSize || 36) * scale}px;line-height:1;">${escapeHtml(item.emojiIcono || '🎙️')}</span>`
+      : '';
+    box.innerHTML = `${icon}<div><div style="font-weight:bold;font-size:${(item.size1 || 24) * scale}px;color:${escapeAttribute(item.color1 || '#ffffff')};">${escapeHtml(item.linea1 || '')}</div><div style="font-size:${(item.size2 || 14) * scale}px;color:${escapeAttribute(item.color2 || '#cccccc')};">${escapeHtml(item.linea2 || '')}</div></div>`;
+    if (preview) {
+      box.style.transform = 'translate(-50%, -50%) scale(1)';
+    }
+  }
+
+  function createVideoPreview(video) {
+    const el = document.createElement('div');
+    el.className = 'prev-video';
+    el.dataset.kind = 'video';
+    el.dataset.id = video.id;
+    const frame = document.createElement('div');
+    frame.className = 'prev-video-frame';
+    const player = document.createElement('video');
+    player.muted = true;
+    player.loop = true;
+    player.playsInline = true;
+    player.preload = 'metadata';
+    const title = document.createElement('div');
+    title.className = 'prev-video-title';
+    frame.appendChild(player);
+    el.append(frame, title);
+    return el;
+  }
+
+  function createImagePreview(image) {
+    const el = document.createElement('div');
+    el.className = 'prev-image';
+    el.dataset.kind = 'imagen';
+    el.dataset.id = image.id;
+    const frame = document.createElement('div');
+    frame.className = 'prev-image-frame';
+    const img = document.createElement('img');
+    const title = document.createElement('div');
+    title.className = 'prev-video-title';
+    frame.appendChild(img);
+    el.append(frame, title);
+    return el;
+  }
+
+  function createBoardPreview(board) {
+    const el = document.createElement('div');
+    el.className = 'prev-board';
+    el.dataset.kind = 'pizarra';
+    el.dataset.id = board.id;
+    const drawing = document.createElement('canvas');
+    drawing.className = 'board-drawing';
+    el.appendChild(drawing);
+    return el;
+  }
+
+  function styleVideoPreview(el, video) {
+    const scale = escalaPrevio();
+    el.style.left = `${video.posX ?? 50}%`;
+    el.style.top = `${video.posY ?? 50}%`;
+    const previewWidth = (video.ancho || 320) * scale;
+    const previewHeight = (video.alto || 180) * scale;
+    el.style.width = `${previewWidth}px`;
+    el.style.height = `${video.forma === 'circulo' ? previewWidth : previewHeight}px`;
+    el.classList.toggle('selected', tipoSeleccionado === 'video' && idSeleccionado === video.id);
+    const frame = el.querySelector('.prev-video-frame');
+    const shape = video.forma || 'rectangulo';
+    frame.style.borderRadius = shape === 'circulo' ? '50%' : shape === 'redondeado' ? `${12 * scale}px` : '0';
+    frame.style.borderWidth = `${(video.anchoBorde ?? 2) * scale}px`;
+    frame.style.borderColor = video.colorBorde || '#3b82f6';
+    const player = el.querySelector('video');
+    const file = archivos.video.find(item => item.nombre === video.archivo);
+    const source = file ? file.url : '';
+    if (source && player.dataset.src !== source) {
+      player.src = source;
+      player.dataset.src = source;
+    }
+    player.style.borderRadius = shape === 'circulo' ? '50%' : shape === 'redondeado' ? `${10 * scale}px` : '0';
+    const title = el.querySelector('.prev-video-title');
+    title.textContent = video.titulo || '';
+    title.className = `prev-video-title ${video.tituloPos === 'abajo' ? 'below' : 'above'}`;
+    title.style.display = video.titulo ? 'block' : 'none';
+    title.style.fontSize = `${11 * scale}px`;
+    title.style.padding = `${2 * scale}px ${6 * scale}px`;
+    title.style.borderRadius = `${3 * scale}px`;
+    title.style.bottom = video.tituloPos === 'abajo' ? '' : `calc(100% + ${3 * scale}px)`;
+    title.style.top = video.tituloPos === 'abajo' ? `calc(100% + ${3 * scale}px)` : '';
+  }
+
+  function styleImagePreview(el, image) {
+    const scale = escalaPrevio();
+    el.style.left = `${image.posX ?? 50}%`;
+    el.style.top = `${image.posY ?? 50}%`;
+    const previewWidth = (image.ancho || 320) * scale;
+    const previewHeight = (image.alto || 180) * scale;
+    el.style.width = `${previewWidth}px`;
+    el.style.height = `${image.forma === 'circulo' ? previewWidth : previewHeight}px`;
+    el.classList.toggle('selected', tipoSeleccionado === 'imagen' && idSeleccionado === image.id);
+    const frame = el.querySelector('.prev-image-frame');
+    const shape = image.forma || 'rectangulo';
+    frame.style.borderRadius = shape === 'circulo' ? '50%' : shape === 'redondeado' ? `${12 * scale}px` : '0';
+    frame.style.borderWidth = `${(image.anchoBorde ?? 2) * scale}px`;
+    frame.style.borderColor = image.colorBorde || '#3b82f6';
+    const file = archivos.imagen.find(item => item.nombre === image.archivo);
+    const img = el.querySelector('img');
+    const source = file ? file.url : '';
+    if (source && img.dataset.src !== source) {
+      img.src = source;
+      img.dataset.src = source;
+    }
+    img.style.borderRadius = shape === 'circulo' ? '50%' : shape === 'redondeado' ? `${10 * scale}px` : '0';
+    const title = el.querySelector('.prev-video-title');
+    title.textContent = image.titulo || '';
+    title.className = `prev-video-title ${image.tituloPos === 'abajo' ? 'below' : 'above'}`;
+    title.style.display = image.titulo ? 'block' : 'none';
+    title.style.fontSize = `${11 * scale}px`;
+    title.style.padding = `${2 * scale}px ${6 * scale}px`;
+    title.style.borderRadius = `${3 * scale}px`;
+    title.style.bottom = image.tituloPos === 'abajo' ? '' : `calc(100% + ${3 * scale}px)`;
+    title.style.top = image.tituloPos === 'abajo' ? `calc(100% + ${3 * scale}px)` : '';
+  }
+
+  function styleBoardPreview(el, board) {
+    const scale = escalaPrevio();
+    el.style.left = `${board.posX ?? 50}%`;
+    el.style.top = `${board.posY ?? 50}%`;
+    el.style.width = `${(board.ancho || 640) * scale}px`;
+    el.style.height = `${(board.alto || 360) * scale}px`;
+    el.style.setProperty('--board-border-width', `${(board.bordeAncho ?? 2) * scale}px`);
+    el.style.setProperty('--board-border-color', board.bordeColor || '#38bdf8');
+    el.style.backgroundColor = colorWithAlpha(board.fondo || '#ffffff', board.fondoAlpha ?? 0);
+    el.classList.toggle('selected', tipoSeleccionado === 'pizarra' && idSeleccionado === board.id);
+    const canvas = el.querySelector('canvas');
+    const width = board.ancho || 640;
+    const height = board.alto || 360;
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    canvas.style.cursor = tipoSeleccionado === 'pizarra'
+      ? herramientaPizarra === 'mover' ? 'move' : 'crosshair'
+      : 'pointer';
+    if (boardDrawingSources.get(canvas) !== (board.dibujo || '')) {
+      boardDrawingSources.set(canvas, board.dibujo || '');
+      if (board.dibujo) {
+        const image = new Image();
+        image.onload = () => {
+          if (boardDrawingSources.get(canvas) === board.dibujo) {
+            canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+          }
+        };
+        image.src = board.dibujo;
+      } else {
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
       }
+    }
+  }
 
-      box.innerHTML = `
-        ${iconHtml}
-        <div>
-          <div style="font-weight:bold; font-size:${(item.size1||24)/2}px; color:${item.color1};">${item.linea1}</div>
-          <div style="font-size:${(item.size2||14)/2}px; color:${item.color2};">${item.linea2}</div>
-        </div>
-      `;
-
-      box.onmousedown = () => {
-        idSeleccionado = item.id;
-        dragging = true;
-        render();
-      };
-      stage.appendChild(box);
+  function renderStage() {
+    const stage = document.getElementById('stage');
+    const wanted = new Set();
+    Object.values(elementos.video).forEach(video => {
+      const key = `video:${video.id}`;
+      wanted.add(key);
+      let node = stage.querySelector(`[data-key="${CSS.escape(key)}"]`);
+      if (!node) {
+        node = createVideoPreview(video);
+        node.dataset.key = key;
+        stage.appendChild(node);
+      }
+      styleVideoPreview(node, video);
     });
-
-    // BOTONERA
-    const bot = document.getElementById('botonera');
-    bot.innerHTML = '';
-    Object.values(gafetesLocales).forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'bot-item';
-      const estaActivo = item.visibilidad;
-      div.innerHTML = `
-        <div style="font-size:12px; font-weight:bold; margin-bottom:4px;">
-          ${item.emojiIcono || '🏷️'} ${item.nombreGafete} ${item.usarCiclo ? '🔄' : ''}
-        </div>
-        <button class="btn-gray ${estaActivo ? 'active' : ''}" onclick="socket.emit('toggle-visibilidad', '${item.id}')">
-          ${estaActivo ? 'EN PANTALLA (Clic para Ocultar)' : 'MOSTRAR EN OBS'}
-        </button>
-      `;
-      bot.appendChild(div);
+    Object.values(elementos.imagen).forEach(image => {
+      const key = `imagen:${image.id}`;
+      wanted.add(key);
+      let node = stage.querySelector(`[data-key="${CSS.escape(key)}"]`);
+      if (!node) {
+        node = createImagePreview(image);
+        node.dataset.key = key;
+        stage.appendChild(node);
+      }
+      styleImagePreview(node, image);
+    });
+    Object.values(elementos.pizarra).forEach(board => {
+      const key = `pizarra:${board.id}`;
+      wanted.add(key);
+      let node = stage.querySelector(`[data-key="${CSS.escape(key)}"]`);
+      if (!node) {
+        node = createBoardPreview(board);
+        node.dataset.key = key;
+        stage.appendChild(node);
+      }
+      styleBoardPreview(node, board);
+    });
+    Object.values(elementos.gafete).forEach(item => {
+      const key = `gafete:${item.id}`;
+      wanted.add(key);
+      let node = stage.querySelector(`[data-key="${CSS.escape(key)}"]`);
+      if (!node) {
+        node = document.createElement('div');
+        node.dataset.key = key;
+        stage.appendChild(node);
+      }
+      styleBadge(node, item, true);
+    });
+    Array.from(stage.children).forEach(node => {
+      if (!wanted.has(node.dataset.key)) node.remove();
     });
   }
 
-  // DRAG & DROP
-  const stage = document.getElementById('stage');
-  stage.onmousemove = (e) => {
-    if (!dragging || !idSeleccionado) return;
-    const rect = stage.getBoundingClientRect();
-    let x = ((e.clientX - rect.left) / rect.width) * 100;
-    let y = ((e.clientY - rect.top) / rect.height) * 100;
+  function escalaPrevio() {
+    const stage = document.getElementById('stage');
+    return overlaySize.width > 0 ? stage.clientWidth / overlaySize.width : 0;
+  }
 
-    x = Math.max(0, Math.min(100, x));
-    y = Math.max(0, Math.min(100, y));
+  function actualizarControlesTamanoOverlay() {
+    const value = `${overlaySize.width}x${overlaySize.height}`;
+    const preset = document.getElementById('overlayPreset');
+    const isPreset = Array.from(preset.options).some(option => option.value === value);
+    preset.value = isPreset ? value : 'custom';
+    document.getElementById('customOverlaySize').style.display = isPreset ? 'none' : 'flex';
+    document.getElementById('overlayWidth').value = overlaySize.width;
+    document.getElementById('overlayHeight').value = overlaySize.height;
+    document.getElementById('overlayAspectRatio').textContent =
+      `${overlaySize.width} × ${overlaySize.height} px · relación ${simplificarRelacion(overlaySize.width, overlaySize.height)}`;
+    const stage = document.getElementById('stage');
+    stage.style.aspectRatio = `${overlaySize.width} / ${overlaySize.height}`;
+  }
 
-    gafetesLocales[idSeleccionado].posX = x;
-    gafetesLocales[idSeleccionado].posY = y;
-    document.getElementById('lblX').textContent = Math.round(x);
-    document.getElementById('lblY').textContent = Math.round(y);
-    actualizar();
-  };
+  function simplificarRelacion(width, height) {
+    const divisorComun = (a, b) => b === 0 ? a : divisorComun(b, a % b);
+    const divisor = divisorComun(width, height);
+    return `${width / divisor}:${height / divisor}`;
+  }
 
-  window.onmouseup = () => { dragging = false; };
+  function cambiarPresetOverlay() {
+    const value = document.getElementById('overlayPreset').value;
+    if (value === 'custom') {
+      document.getElementById('customOverlaySize').style.display = 'flex';
+      document.getElementById('overlayWidth').value = overlaySize.width;
+      document.getElementById('overlayHeight').value = overlaySize.height;
+      return;
+    }
+    const [width, height] = value.split('x').map(Number);
+    guardarTamanoOverlay(width, height);
+  }
 
-  function seleccionarGafete(id) {
+  function aplicarTamanoOverlay() {
+    const width = Number(document.getElementById('overlayWidth').value);
+    const height = Number(document.getElementById('overlayHeight').value);
+    if (!Number.isInteger(width) || width < 320 || width > 3840 || !Number.isInteger(height) || height < 240 || height > 2160) {
+      setStatus('La resolución personalizada debe estar entre 320×240 y 3840×2160 píxeles.', true);
+      return;
+    }
+    guardarTamanoOverlay(width, height);
+  }
+
+  function guardarTamanoOverlay(width, height) {
+    socket.emit('guardar-resolucion-overlay', { width, height }, result => {
+      if (!result || !result.ok) {
+        setStatus(result && result.error ? result.error : 'No se pudo guardar la resolución del overlay.', true);
+        return;
+      }
+      setStatus(`Resolución del overlay: ${width} × ${height}.`);
+    });
+  }
+
+  function makeToggleButton(type, item) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'bot-item';
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:12px;font-weight:bold;margin-bottom:4px;overflow-wrap:anywhere;';
+    const icon = type === 'audio' ? '🔊' : type === 'video' ? '🎬' : type === 'imagen' ? '🖼️' : '✏️';
+    label.textContent = `${icon} ${item.nombre || item.id}`;
+    wrapper.appendChild(label);
+    if (item.gafeteId && elementos.gafete[item.gafeteId]) {
+      const linkedBadge = document.createElement('div');
+      linkedBadge.className = 'linked-caption';
+      linkedBadge.textContent = `Controla: ${elementos.gafete[item.gafeteId].nombreGafete || item.gafeteId}`;
+      wrapper.appendChild(linkedBadge);
+    }
+    const controls = document.createElement('div');
+    controls.className = 'media-toggle-row';
+    const button = document.createElement('button');
+    button.className = `btn-gray${item.activo ? ' active' : ''}`;
+    button.textContent = item.activo ? 'REPRODUCIENDO (clic para detener)' : 'REPRODUCIR';
+    button.onclick = () => {
+      setStatus('');
+      socket.emit('toggle-media', { tipo: type, id: item.id });
+    };
+    const remove = document.createElement('button');
+    remove.className = 'btn-red delete-item';
+    remove.textContent = '×';
+    remove.title = `Eliminar ${type === 'audio' ? 'audio' : type === 'video' ? 'video' : type === 'imagen' ? 'imagen' : 'pizarra'} ${item.nombre || item.id}`;
+    remove.setAttribute('aria-label', remove.title);
+    remove.onclick = () => eliminarElemento(type, item.id);
+    controls.append(button, remove);
+    wrapper.appendChild(controls);
+    return wrapper;
+  }
+
+  function renderButtons() {
+    const badgePanel = document.getElementById('botoneraGafetes');
+    badgePanel.innerHTML = '';
+    Object.values(elementos.gafete).forEach(item => {
+      const wrapper = document.createElement('div');
+      const controller = [...Object.values(elementos.audio), ...Object.values(elementos.video), ...Object.values(elementos.imagen)]
+        .find(media => media.gafeteId === item.id);
+      wrapper.className = `bot-item${controller ? ' linked-badge' : ''}`;
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:12px;font-weight:bold;margin-bottom:4px;';
+      label.textContent = `${item.emojiIcono || '🏷️'} ${item.nombreGafete || item.id}${item.usarCiclo ? ' 🔄' : ''}`;
+      wrapper.appendChild(label);
+      if (controller) {
+        const linked = document.createElement('div');
+        linked.className = 'linked-caption';
+        linked.textContent = `Vinculado a ${controller.nombre || controller.id}; se controla desde ese botón.`;
+        wrapper.appendChild(linked);
+      }
+      const button = document.createElement('button');
+      button.className = `btn-gray${item.visibilidad ? ' active' : ''}`;
+      button.style.width = '100%';
+      button.textContent = controller
+        ? item.visibilidad ? 'VISIBLE POR EL MEDIO' : 'CONTROLADO POR EL MEDIO'
+        : item.visibilidad ? 'EN PANTALLA (clic para ocultar)' : 'MOSTRAR EN OBS';
+      button.disabled = Boolean(controller);
+      button.title = controller ? 'Usá el botón del medio asociado para mostrar u ocultar este gafete.' : '';
+      button.onclick = () => socket.emit('toggle-visibilidad', item.id);
+      const controls = document.createElement('div');
+      controls.className = 'media-toggle-row';
+      const remove = document.createElement('button');
+      remove.className = 'btn-red delete-item';
+      remove.textContent = '×';
+      remove.title = `Eliminar ${item.nombreGafete || item.id}`;
+      remove.setAttribute('aria-label', remove.title);
+      remove.onclick = () => eliminarElemento('gafete', item.id);
+      controls.append(button, remove);
+      wrapper.appendChild(controls);
+      badgePanel.appendChild(wrapper);
+    });
+    const audioPanel = document.getElementById('botoneraAudio');
+    const videoPanel = document.getElementById('botoneraVideo');
+    const imagePanel = document.getElementById('botoneraImagen');
+    const boardPanel = document.getElementById('botoneraPizarra');
+    audioPanel.innerHTML = '';
+    videoPanel.innerHTML = '';
+    imagePanel.innerHTML = '';
+    boardPanel.innerHTML = '';
+    Object.values(elementos.audio).forEach(item => audioPanel.appendChild(makeToggleButton('audio', item)));
+    Object.values(elementos.video).forEach(item => videoPanel.appendChild(makeToggleButton('video', item)));
+    Object.values(elementos.imagen).forEach(item => imagePanel.appendChild(makeToggleButton('imagen', item)));
+    Object.values(elementos.pizarra).forEach(item => boardPanel.appendChild(makeToggleButton('pizarra', item)));
+    renderStageItems();
+  }
+
+  function renderStageItems() {
+    const panel = document.getElementById('stageItems');
+    panel.innerHTML = '';
+    const kinds = [
+      ['gafete', Object.values(elementos.gafete), item => item.nombreGafete || item.id, item => item.emojiIcono || '🏷️'],
+      ['audio', Object.values(elementos.audio), item => item.nombre || item.id, () => '🔊'],
+      ['video', Object.values(elementos.video), item => item.nombre || item.id, () => '🎬'],
+      ['imagen', Object.values(elementos.imagen), item => item.nombre || item.id, () => '🖼️'],
+      ['pizarra', Object.values(elementos.pizarra), item => item.nombre || item.id, () => '✏️']
+    ];
+    let count = 0;
+    kinds.forEach(([type, items, getName, getIcon]) => {
+      items.forEach(item => {
+        count += 1;
+        const entry = document.createElement('div');
+        entry.className = `stage-item${tipoSeleccionado === type && idSeleccionado === item.id ? ' selected' : ''}`;
+        const select = document.createElement('button');
+        select.type = 'button';
+        select.className = 'stage-item-select';
+        select.title = `Editar ${getName(item)}`;
+        const icon = document.createElement('span');
+        icon.textContent = getIcon(item);
+        const name = document.createElement('span');
+        name.textContent = getName(item);
+        select.append(icon, name);
+        select.onclick = () => seleccionarElemento(type, item.id);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn-red delete-item';
+        remove.textContent = '×';
+        remove.title = `Eliminar ${getName(item)}`;
+        remove.setAttribute('aria-label', remove.title);
+        remove.onclick = () => eliminarElemento(type, item.id);
+        entry.append(select, remove);
+        panel.appendChild(entry);
+      });
+    });
+    if (!count) {
+      const empty = document.createElement('span');
+      empty.className = 'hint';
+      empty.textContent = 'Todavía no hay elementos.';
+      panel.appendChild(empty);
+    }
+  }
+
+  function colorWithAlpha(color, alpha) {
+    return `rgba(${parseInt(color.slice(1, 3), 16)},${parseInt(color.slice(3, 5), 16)},${parseInt(color.slice(5, 7), 16)},${alpha / 100})`;
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+  }
+
+  function escapeAttribute(value) {
+    return escapeHtml(value);
+  }
+
+  function seleccionarElemento(type, id) {
+    tipoSeleccionado = type;
     idSeleccionado = id;
     render();
   }
 
-  function actualizar() {
-    if (!idSeleccionado) return;
+  function crearElemento(type) {
+    if (type === 'gafete') {
+      socket.emit('crear-gafete');
+      return;
+    }
+    if (type === 'pizarra') {
+      socket.emit('crear-pizarra');
+      return;
+    }
+    if (!archivos[type].length) {
+      setStatus(`No hay archivos compatibles en public/${type}.`, true);
+      return;
+    }
+    socket.emit('crear-media', { tipo: type, nombreArchivo: archivos[type][0].nombre });
+    setStatus('');
+  }
 
-    const tipoIconoVal = document.getElementById('tipoIcono').value;
-    document.getElementById('wrapper-emoji').style.display = (tipoIconoVal === 'emoji') ? 'block' : 'none';
-    document.getElementById('wrapper-imagen').style.display = (tipoIconoVal === 'imagen') ? 'block' : 'none';
-
-    const data = {
-      id: idSeleccionado,
+  function guardarGafete() {
+    const g = entity('gafete');
+    if (!g) return;
+    document.getElementById('sec-logo').style.display = document.getElementById('usarLogo').checked ? 'block' : 'none';
+    document.getElementById('wrapper-emoji').style.display = document.getElementById('tipoIcono').value === 'emoji' ? 'block' : 'none';
+    document.getElementById('wrapper-imagen').style.display = document.getElementById('tipoIcono').value === 'imagen' ? 'block' : 'none';
+    socket.emit('guardar-gafete', {
+      id: g.id,
       nombreGafete: document.getElementById('nombreGafete').value,
       linea1: document.getElementById('linea1').value,
       size1: Number(document.getElementById('size1').value),
@@ -346,38 +1074,364 @@
       linea2: document.getElementById('linea2').value,
       size2: Number(document.getElementById('size2').value),
       color2: document.getElementById('color2').value,
-
       usarLogo: document.getElementById('usarLogo').checked,
-      tipoIcono: tipoIconoVal,
+      tipoIcono: document.getElementById('tipoIcono').value,
       emojiIcono: document.getElementById('emojiIcono').value,
       logoUrl: document.getElementById('logoUrl').value,
       logoSize: Number(document.getElementById('logoSize').value),
       logoPos: document.getElementById('logoPos').value,
-
       borderRadius: document.getElementById('borderRadius').value,
       fontFamily: document.getElementById('fontFamily').value,
       bgColor: document.getElementById('bgColor').value,
       bgAlpha: Number(document.getElementById('bgAlpha').value),
       borderColor: document.getElementById('borderColor').value,
-
+      borderWidth: Number(document.getElementById('borderWidth').value),
       animEntrada: document.getElementById('animEntrada').value,
       animSalida: document.getElementById('animSalida').value,
       timerSeconds: Number(document.getElementById('timerSeconds').value),
       usarCiclo: document.getElementById('usarCiclo').checked,
       tiempoOculto: Number(document.getElementById('tiempoOculto').value),
-      posX: gafetesLocales[idSeleccionado].posX,
-      posY: gafetesLocales[idSeleccionado].posY
-    };
-
-    socket.emit('guardar-gafete', data);
+      posX: g.posX,
+      posY: g.posY
+    });
   }
 
-  function eliminarActual() {
-    if (idSeleccionado) {
-      socket.emit('eliminar-gafete', idSeleccionado);
-      idSeleccionado = null;
+  function guardarMedia(type) {
+    const item = collection(type)[idSeleccionado];
+    if (!item) return;
+    setStatus('');
+    if (type === 'audio') {
+      item.nombre = document.getElementById('audioNombre').value;
+      item.archivo = document.getElementById('audioArchivo').value || item.archivo;
+      item.gafeteId = document.getElementById('audioGafete').value || null;
+      item.volumen = Number(document.getElementById('audioVolumen').value);
+      item.bucle = document.getElementById('audioBucle').checked;
+    } else if (type === 'video') {
+      item.nombre = document.getElementById('videoNombre').value;
+      item.archivo = document.getElementById('videoArchivo').value || item.archivo;
+      item.gafeteId = document.getElementById('videoGafete').value || null;
+      item.volumen = Number(document.getElementById('videoVolumen').value);
+      item.bucle = document.getElementById('videoBucle').checked;
+      item.animEntrada = document.getElementById('videoAnimEntrada').value;
+      item.animSalida = document.getElementById('videoAnimSalida').value;
+      item.titulo = document.getElementById('videoTitulo').value;
+      item.tituloPos = document.getElementById('videoTituloPos').value;
+      item.ancho = Number(document.getElementById('videoAncho').value);
+      item.alto = Number(document.getElementById('videoAlto').value);
+      item.forma = document.getElementById('videoForma').value;
+      item.colorBorde = document.getElementById('videoColorBorde').value;
+      item.anchoBorde = Number(document.getElementById('videoAnchoBorde').value);
+    } else {
+      item.nombre = document.getElementById('imagenNombre').value;
+      item.archivo = document.getElementById('imagenArchivo').value || item.archivo;
+      item.audioId = document.getElementById('imagenAudio').value || null;
+      item.gafeteId = document.getElementById('imagenGafete').value || null;
+      item.animEntrada = document.getElementById('imagenAnimEntrada').value;
+      item.animSalida = document.getElementById('imagenAnimSalida').value;
+      item.titulo = document.getElementById('imagenTitulo').value;
+      item.tituloPos = document.getElementById('imagenTituloPos').value;
+      item.ancho = Number(document.getElementById('imagenAncho').value);
+      item.alto = Number(document.getElementById('imagenAlto').value);
+      item.forma = document.getElementById('imagenForma').value;
+      item.colorBorde = document.getElementById('imagenColorBorde').value;
+      item.anchoBorde = Number(document.getElementById('imagenAnchoBorde').value);
+    }
+    renderStage();
+    socket.emit('guardar-media', { tipo: type, data: { ...item } });
+  }
+
+  function guardarPizarra() {
+    const board = entity('pizarra');
+    if (!board) return;
+    board.nombre = document.getElementById('pizarraNombre').value;
+    board.ancho = Number(document.getElementById('pizarraAncho').value);
+    board.alto = Number(document.getElementById('pizarraAlto').value);
+    board.fondo = document.getElementById('pizarraFondo').value;
+    board.fondoAlpha = Number(document.getElementById('pizarraFondoAlpha').value);
+    board.bordeColor = document.getElementById('pizarraBordeColor').value;
+    board.bordeAncho = Number(document.getElementById('pizarraBordeAncho').value);
+    renderStage();
+    socket.emit('guardar-pizarra', { ...board });
+  }
+
+  function actualizarHerramientaPizarra(tool = herramientaPizarra) {
+    if (['mover', 'lapiz', 'linea', 'rectangulo', 'circulo', 'borrador'].includes(tool)) {
+      herramientaPizarra = tool;
+    }
+    document.querySelectorAll('[data-board-tool]').forEach(button => {
+      const active = button.dataset.boardTool === herramientaPizarra;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    if (tipoSeleccionado === 'pizarra') renderStage();
+  }
+
+  function limpiarPizarra() {
+    const board = entity('pizarra');
+    if (!board) return;
+    board.dibujo = '';
+    const canvas = document.querySelector(`[data-key="${CSS.escape(`pizarra:${board.id}`)}"] canvas`);
+    if (canvas) {
+      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+      boardDrawingSources.set(canvas, '');
+    }
+    socket.emit('guardar-pizarra', { ...board });
+    setStatus('Dibujo de la pizarra borrado.');
+  }
+
+  function drawBoardShape(context, tool, start, end) {
+    context.beginPath();
+    if (tool === 'linea') {
+      context.moveTo(start.x, start.y);
+      context.lineTo(end.x, end.y);
+    } else if (tool === 'rectangulo') {
+      context.rect(start.x, start.y, end.x - start.x, end.y - start.y);
+    } else if (tool === 'circulo') {
+      const centerX = (start.x + end.x) / 2;
+      const centerY = (start.y + end.y) / 2;
+      context.ellipse(centerX, centerY, Math.abs(end.x - start.x) / 2, Math.abs(end.y - start.y) / 2, 0, 0, Math.PI * 2);
+    }
+    context.stroke();
+  }
+
+  function commitBoardDrawing() {
+    const drawing = dibujoActivo;
+    if (!drawing) return;
+    dibujoActivo = null;
+    const board = elementos.pizarra[drawing.id];
+    if (!board) return;
+    try {
+      board.dibujo = drawing.canvas.toDataURL('image/png');
+      boardDrawingSources.set(drawing.canvas, board.dibujo);
+      socket.emit('guardar-pizarra', { ...board });
+      setStatus('Dibujo guardado.');
+    } catch (error) {
+      setStatus(`No se pudo guardar el dibujo: ${error.message}`, true);
     }
   }
+
+  function eliminarElemento(type, id = idSeleccionado) {
+    const item = id ? collection(type)[id] : null;
+    if (!item) return;
+    const name = type === 'gafete' ? item.nombreGafete || item.id : item.nombre || item.id;
+    if (!window.confirm(`¿Eliminar "${name}"?`)) return;
+    if (type === 'gafete') socket.emit('eliminar-gafete', id);
+    else socket.emit('eliminar-media', { tipo: type, id });
+    if (tipoSeleccionado === type && idSeleccionado === id) {
+      idSeleccionado = null;
+      tipoSeleccionado = null;
+    }
+  }
+
+  function nuevaConfiguracion() {
+    if (!window.confirm('Empezar una configuración nueva borrará todos los gafetes, medios y pizarras guardados y restablecerá la resolución a 1920 × 1080. Los archivos de audio, video e imagen no se borrarán. ¿Continuar?')) return;
+    socket.emit('nueva-configuracion', result => {
+      if (!result || !result.ok) {
+        setStatus('No se pudo iniciar una configuración nueva.', true);
+        return;
+      }
+      tipoSeleccionado = null;
+      idSeleccionado = null;
+      render();
+      setStatus('Configuración nueva lista.');
+    });
+  }
+
+  function updatePositionLabels() {
+    const item = entity(tipoSeleccionado);
+    document.getElementById('lblX').textContent = item ? Math.round(item.posX || 0) : 0;
+    document.getElementById('lblY').textContent = item ? Math.round(item.posY || 0) : 0;
+  }
+
+  const stage = document.getElementById('stage');
+  actualizarControlesTamanoOverlay();
+  new ResizeObserver(() => renderStage()).observe(stage);
+  stage.addEventListener('pointerdown', event => {
+    const target = event.target.closest('[data-kind][data-id]');
+    if (!target) return;
+    const type = target.dataset.kind;
+    const id = target.dataset.id;
+    tipoSeleccionado = type;
+    idSeleccionado = id;
+    render();
+    if (type === 'pizarra') {
+      const tool = herramientaPizarra;
+      if (tool !== 'mover') {
+        const boardNode = stage.querySelector(`[data-key="${CSS.escape(`pizarra:${id}`)}"]`);
+        const canvas = boardNode && boardNode.querySelector('canvas');
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const point = {
+          x: Math.max(0, Math.min(canvas.width, (event.clientX - rect.left) * scaleX)),
+          y: Math.max(0, Math.min(canvas.height, (event.clientY - rect.top) * scaleY))
+        };
+        const context = canvas.getContext('2d');
+        dibujoActivo = {
+          id,
+          tool,
+          canvas,
+          context,
+          start: point,
+          current: point,
+          snapshot: context.getImageData(0, 0, canvas.width, canvas.height)
+        };
+        canvas.setPointerCapture(event.pointerId);
+        if (tool === 'lapiz' || tool === 'borrador') {
+          context.beginPath();
+          context.moveTo(point.x, point.y);
+        }
+        event.preventDefault();
+        return;
+      }
+    }
+    dragging = !document.getElementById('bloquearMovimiento').checked;
+    if (dragging) stage.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  stage.addEventListener('pointermove', event => {
+    if (dibujoActivo) {
+      const { canvas, context, tool, start, snapshot } = dibujoActivo;
+      const rect = canvas.getBoundingClientRect();
+      const point = {
+        x: Math.max(0, Math.min(canvas.width, (event.clientX - rect.left) * canvas.width / rect.width)),
+        y: Math.max(0, Math.min(canvas.height, (event.clientY - rect.top) * canvas.height / rect.height))
+      };
+      dibujoActivo.current = point;
+      context.lineWidth = Math.max(1, Math.min(80, Number(document.getElementById('pizarraGrosor').value) || 6));
+      context.lineCap = 'round';
+      context.lineJoin = 'round';
+      if (tool === 'lapiz' || tool === 'borrador') {
+        context.globalCompositeOperation = tool === 'borrador' ? 'destination-out' : 'source-over';
+        context.strokeStyle = document.getElementById('pizarraColor').value;
+        context.lineTo(point.x, point.y);
+        context.stroke();
+      } else {
+        context.putImageData(snapshot, 0, 0);
+        context.globalCompositeOperation = 'source-over';
+        context.strokeStyle = document.getElementById('pizarraColor').value;
+        drawBoardShape(context, tool, start, point);
+      }
+      event.preventDefault();
+      return;
+    }
+    if (!dragging || !idSeleccionado) return;
+    const item = collection(tipoSeleccionado)[idSeleccionado];
+    if (!item) return;
+    const rect = stage.getBoundingClientRect();
+    item.posX = Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100));
+    item.posY = Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100));
+    const node = stage.querySelector(`[data-key="${CSS.escape(`${tipoSeleccionado}:${idSeleccionado}`)}"]`);
+    if (node) {
+      node.style.left = `${item.posX}%`;
+      node.style.top = `${item.posY}%`;
+    }
+    updatePositionLabels();
+    if (positionSaveTimer) clearTimeout(positionSaveTimer);
+    positionSaveTimer = setTimeout(() => {
+      if (tipoSeleccionado === 'gafete') socket.emit('guardar-gafete', { id: item.id, posX: item.posX, posY: item.posY });
+      else if (tipoSeleccionado === 'pizarra') socket.emit('guardar-pizarra', { ...item });
+      else socket.emit('guardar-media', { tipo: tipoSeleccionado, data: { ...item } });
+    }, 80);
+  });
+  stage.addEventListener('pointerup', () => {
+    if (dibujoActivo) commitBoardDrawing();
+    dragging = false;
+  });
+  stage.addEventListener('pointercancel', () => {
+    if (dibujoActivo) commitBoardDrawing();
+    dragging = false;
+  });
+
+  function actualizarEtiquetaVolumen(type) {
+    const value = document.getElementById(`${type}Volumen`).value;
+    document.getElementById(`${type}VolumenLabel`).textContent = `${value}%`;
+  }
+
+  function setStatus(message, error = false) {
+    const status = document.getElementById('editorStatus');
+    status.textContent = message || '';
+    status.classList.toggle('error', error);
+  }
+
+  async function cargarArchivos(type) {
+    const response = await fetch(`/api/media/${type}`);
+    if (!response.ok) throw new Error(`No se pudieron listar los archivos de ${type}.`);
+    archivos[type] = await response.json();
+    render();
+  }
+
+  async function actualizarArchivos() {
+    try {
+      await Promise.all([cargarArchivos('audio'), cargarArchivos('video'), cargarArchivos('imagen')]);
+      setStatus('Lista de archivos actualizada.');
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  }
+
+  function alternarSelectorEmoji() {
+    document.getElementById('emojiPicker').classList.toggle('open');
+  }
+
+  function exportarConfiguracion() {
+    const config = {
+      gafetes: elementos.gafete,
+      audios: elementos.audio,
+      videos: elementos.video,
+      imagenes: elementos.imagen,
+      pizarras: elementos.pizarra,
+      overlaySize
+    };
+    const contents = JSON.stringify(config, null, 2);
+    const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `controlobs-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus('Configuración exportada.');
+  }
+
+  async function importarConfiguracion(event) {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    if (!file) return;
+    input.value = '';
+    if (!window.confirm('Importar esta configuración reemplazará todos los gafetes, medios, pizarras y la resolución actual del overlay. ¿Continuar?')) return;
+    try {
+      const config = JSON.parse(await file.text());
+      socket.emit('importar-configuracion', config, result => {
+        if (!result || !result.ok) {
+          setStatus(result && result.error ? result.error : 'No se pudo importar la configuración.', true);
+          return;
+        }
+        setStatus('Configuración importada correctamente.');
+      });
+    } catch (error) {
+      setStatus(`No se pudo leer el archivo JSON: ${error.message}`, true);
+    }
+  }
+
+  cargarArchivos('audio').catch(error => setStatus(error.message, true));
+  cargarArchivos('video').catch(error => setStatus(error.message, true));
+  cargarArchivos('imagen').catch(error => setStatus(error.message, true));
+</script>
+<script type="module">
+  import Picker from '/vendor/emoji-picker-element/picker.js';
+  import i18n from '/vendor/emoji-picker-element/i18n/es.js';
+
+  const picker = new Picker({ dataSource: '/api/emoji-data.json', locale: 'es', i18n });
+  document.getElementById('emojiPicker').appendChild(picker);
+  picker.addEventListener('emoji-click', event => {
+    document.getElementById('emojiIcono').value = event.detail.unicode;
+    document.getElementById('emojiPicker').classList.remove('open');
+    guardarGafete();
+  });
 </script>
 </body>
 </html>
