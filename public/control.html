@@ -6,9 +6,10 @@
   <script src="/socket.io/socket.io.js"></script>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; background: #09090b; color: #f4f4f5; margin: 0; padding: 15px; }
-    .layout { display: grid; grid-template-columns: minmax(280px, .72fr) minmax(460px, 1.5fr) minmax(220px, .62fr); gap: 15px; max-width: 1800px; margin: auto; }
+    body { font-family: system-ui, sans-serif; background: #09090b; color: #f4f4f5; margin: 0; padding: 15px; overflow: hidden; }
+    .layout { display: grid; grid-template-columns: minmax(280px, .72fr) minmax(460px, 1.5fr) minmax(220px, .62fr); gap: 15px; max-width: 1800px; height: calc(100vh - 30px); margin: auto; }
     .card { background: #18181b; padding: 15px; border-radius: 8px; border: 1px solid #27272a; max-height: 92vh; overflow-y: auto; }
+    #preview-card { display: flex; flex-direction: column; min-height: 0; max-height: none; height: 100%; overflow: hidden; }
     h3 { margin-top: 0; font-size: 15px; border-bottom: 1px solid #27272a; padding-bottom: 8px; color: #3b82f6; }
     .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .panel-heading h3 { flex: 1; margin-bottom: 12px; }
@@ -17,6 +18,7 @@
     label { display: block; margin-top: 8px; font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.5px; }
     input[type="text"], input[type="number"], select { width: 100%; padding: 6px; margin-top: 2px; background: #09090b; border: 1px solid #27272a; color: #fff; border-radius: 4px; font-size: 13px; }
     input[type="color"] { width: 100%; height: 32px; background: #09090b; border: 1px solid #27272a; border-radius: 4px; cursor: pointer; padding: 2px; }
+    textarea { width: 100%; padding: 6px; margin-top: 2px; background: #09090b; border: 1px solid #27272a; color: #fff; border-radius: 4px; font: 13px system-ui, sans-serif; resize: vertical; }
     input[type="range"] { width: 100%; accent-color: #3b82f6; }
     .row { display: flex; gap: 8px; align-items: end; }
     .row > * { flex: 1; min-width: 0; }
@@ -35,11 +37,24 @@
     .hint, .status { font-size: 11px; color: #a1a1aa; }
     .status { min-height: 15px; margin: 5px 0; }
     .status.error { color: #fca5a5; }
+    .confirm-dialog { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .7); }
+    .confirm-dialog[hidden] { display: none; }
+    .confirm-dialog-content { width: min(420px, 100%); padding: 18px; border: 1px solid #3f3f46; border-radius: 8px; background: #18181b; color: #f4f4f5; }
+    .confirm-dialog-content p { margin: 0; line-height: 1.5; }
+    .confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
     #stage { width: 100%; aspect-ratio: 16/9; background: #000; background-image: radial-gradient(#27272a 1px, transparent 1px); background-size: 12px 12px; position: relative; border-radius: 6px; overflow: hidden; box-shadow: inset 0 0 0 2px #3f3f46; }
-    .overlay-size-controls { padding: 0 0 10px; }
+    .preview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+    .preview-toolbar-left { display: flex; align-items: center; min-width: 0; }
+    .preview-toolbar-left .checkbox-row { margin: 0; white-space: nowrap; }
+    .preview-toolbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; flex-shrink: 0; }
+    .overlay-size-controls { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .overlay-size-controls label { display: none; }
+    .overlay-size-controls select { width: 210px; max-width: 35vw; }
     .overlay-size-controls .row { align-items: end; }
-    .overlay-size-controls .hint { margin-bottom: 0; }
+    .overlay-size-controls .row label { display: none; }
+    .overlay-size-controls .row input { min-width: 75px; }
+    .overlay-size-controls .hint { display: none; }
     .prev-box { position: absolute; padding: 8px 14px; border-style: solid; cursor: move; user-select: none; display: flex; gap: 10px; align-items: center; transform: translate(-50%, -50%); max-width: 80%; z-index: 2; }
     .prev-box.selected { outline: 2px dashed #f59e0b; }
     .prev-box.logo-top { flex-direction: column; text-align: center; }
@@ -60,15 +75,18 @@
     .prev-board.selected { outline: 2px dashed #f59e0b; outline-offset: 2px; }
     .prev-board img, .prev-board canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
     .prev-board canvas { touch-action: none; cursor: crosshair; }
+    .resize-handle { display: none; position: absolute; right: -7px; bottom: -7px; z-index: 10; width: 14px; height: 14px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #f59e0b; box-shadow: 0 1px 4px #000; cursor: nwse-resize; touch-action: none; }
+    .prev-box.selected .resize-handle, .prev-video.selected .resize-handle, .prev-image.selected .resize-handle, .prev-board.selected .resize-handle { display: block; }
     .board-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 4px; }
     .board-tool { padding: 7px 4px; background: #27272a; color: #d4d4d8; border: 1px solid #3f3f46; }
     .board-tool.active { background: #1d4ed8; color: #fff; border-color: #60a5fa; }
     .media-panels { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
     .media-panels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .preview-position { display: flex; gap: 14px; align-items: center; }
-    .preview-position label { margin: 0; }
+    .preview-position { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+    .preview-position label { margin: 0; white-space: nowrap; }
     .media-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
     .media-panel { min-width: 0; background: #09090b; border: 1px solid #27272a; border-radius: 6px; padding: 10px; }
+    #previewLists { flex: 1 1 auto; min-height: 0; margin-top: 10px; overflow-y: auto; overscroll-behavior: contain; }
     .media-panel h4 { margin: 0 0 6px; color: #3b82f6; font-size: 12px; }
     .bot-item { margin-bottom: 8px; padding: 10px; background: #09090b; border-radius: 6px; border: 1px solid #27272a; }
     .media-toggle-row { display: flex; gap: 5px; }
@@ -92,16 +110,29 @@
       .layout { grid-template-columns: minmax(270px, .72fr) minmax(380px, 1.3fr); }
       #badge-controls { grid-column: 1 / -1; grid-row: auto; }
       #botoneraGafetes { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+      .preview-toolbar { align-items: flex-start; flex-wrap: wrap; }
+      .preview-toolbar-left, .preview-toolbar-right { width: 100%; justify-content: space-between; }
+      .overlay-size-controls > label { display: none; }
     }
     @media (min-width: 851px) and (max-width: 1150px) {
       .layout { grid-template-columns: minmax(220px, .72fr) minmax(360px, 1.5fr) minmax(170px, .55fr); }
       #badge-controls { grid-column: 3; grid-row: 1; }
       #botoneraGafetes { display: flex; flex-direction: column; }
     }
+    @media (max-width: 850px) {
+      body { overflow: auto; }
+      .layout { height: auto; }
+      #preview-card { height: auto; min-height: 650px; }
+      #previewLists { max-height: 50vh; }
+    }
     @media (max-width: 700px) {
       .layout { display: flex; flex-direction: column; }
       .card { max-height: none; }
+      #preview-card { height: auto; min-height: 0; }
+      #previewLists { flex: 0 0 auto; max-height: 60vh; }
       .media-panels { grid-template-columns: 1fr; }
+      .preview-toolbar { align-items: stretch; }
+      .preview-toolbar-right { flex-wrap: wrap; }
     }
   </style>
 </head>
@@ -131,15 +162,15 @@
       <label>Seleccionar gafete:</label>
       <div class="row"><select id="selGafete" onchange="seleccionarElemento('gafete', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('gafete')">Eliminar</button></div>
       <label>Nombre identificador:</label>
-      <input type="text" id="nombreGafete" oninput="guardarGafete()">
+      <input type="text" id="nombreGafete" oninput="marcarTextoPendienteDeGuardar(guardarGafete)">
       <label>Línea 1 (título):</label>
-      <input type="text" id="linea1" oninput="guardarGafete()">
+      <input type="text" id="linea1" oninput="marcarTextoPendienteDeGuardar(guardarGafete)">
       <div class="row">
         <div><input type="number" id="size1" title="Tamaño px" oninput="guardarGafete()"></div>
         <div><input type="color" id="color1" oninput="guardarGafete()"></div>
       </div>
       <label>Línea 2 (subtítulo):</label>
-      <input type="text" id="linea2" oninput="guardarGafete()">
+      <input type="text" id="linea2" oninput="marcarTextoPendienteDeGuardar(guardarGafete)">
       <div class="row">
         <div><input type="number" id="size2" title="Tamaño px" oninput="guardarGafete()"></div>
         <div><input type="color" id="color2" oninput="guardarGafete()"></div>
@@ -154,14 +185,14 @@
         <div id="wrapper-emoji">
           <label>Emoji / carácter:</label>
           <div class="row">
-            <input type="text" id="emojiIcono" placeholder="🔥, 🎙️, 🧠" oninput="guardarGafete()">
+            <input type="text" id="emojiIcono" placeholder="🔥, 🎙️, 🧠" oninput="marcarTextoPendienteDeGuardar(guardarGafete)">
             <button type="button" class="btn-gray" id="toggleEmojiPicker" onclick="alternarSelectorEmoji()">Elegir</button>
           </div>
           <div class="emoji-picker" id="emojiPicker"></div>
         </div>
         <div id="wrapper-imagen" style="display:none;">
           <label>URL de imagen / logo:</label>
-          <input type="text" id="logoUrl" placeholder="/Imagenes/corona.gif o una URL" oninput="guardarGafete()">
+          <input type="text" id="logoUrl" placeholder="/Imagenes/corona.gif o una URL" oninput="marcarTextoPendienteDeGuardar(guardarGafete)">
           <p class="hint">Se admiten GIF animados como logo. Usá la ruta /Imagenes/nombre.gif.</p>
         </div>
         <label>Tamaño del icono (px):</label><input type="number" id="logoSize" oninput="guardarGafete()">
@@ -178,6 +209,8 @@
         <div><label>Borde:</label><input type="color" id="borderColor" oninput="guardarGafete()"></div>
       </div>
       <label>Grosor del borde (px):</label><input type="number" id="borderWidth" min="0" max="30" step="1" oninput="guardarGafete()">
+      <label>Opacidad del elemento: <span id="gafeteOpacidadLabel">100%</span></label>
+      <input type="range" id="gafeteOpacidad" min="0" max="100" value="100" oninput="actualizarEtiquetaOpacidad('gafete'); guardarGafete()">
 
       <label class="section-title">Animación y tiempo</label>
       <div class="row">
@@ -192,7 +225,7 @@
     <div id="editor-audio" class="editor">
       <label>Seleccionar audio:</label>
       <div class="row"><select id="selAudio" onchange="seleccionarElemento('audio', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('audio')">Eliminar</button></div>
-      <label>Nombre del botón:</label><input type="text" id="audioNombre" oninput="guardarMedia('audio')">
+      <label>Nombre del botón:</label><input type="text" id="audioNombre" oninput="marcarTextoPendienteDeGuardar(() => guardarMedia('audio'))">
       <label>Archivo en public/audio:</label><select id="audioArchivo" onchange="guardarMedia('audio')"></select>
       <p class="hint">Formatos habituales: MP3, WAV, OGG, M4A. Si un M4A falla, su códec puede no ser compatible; probá convertirlo a MP3 o WAV.</p>
       <label>Gafete vinculado:</label><select id="audioGafete" onchange="guardarMedia('audio')"></select>
@@ -204,19 +237,21 @@
     <div id="editor-video" class="editor">
       <label>Seleccionar video:</label>
       <div class="row"><select id="selVideo" onchange="seleccionarElemento('video', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('video')">Eliminar</button></div>
-      <label>Nombre del botón:</label><input type="text" id="videoNombre" oninput="guardarMedia('video')">
+      <label>Nombre del botón:</label><input type="text" id="videoNombre" oninput="marcarTextoPendienteDeGuardar(() => guardarMedia('video'))">
       <label>Archivo en public/video:</label><select id="videoArchivo" onchange="guardarMedia('video')"></select>
       <p class="hint">Formatos habituales: MP4, WebM, OGV.</p>
       <label>Gafete vinculado:</label><select id="videoGafete" onchange="guardarMedia('video')"></select>
       <label>Volumen: <span id="videoVolumenLabel">80%</span></label>
       <input type="range" id="videoVolumen" min="0" max="100" value="80" oninput="actualizarEtiquetaVolumen('video'); guardarMedia('video')">
+      <label>Opacidad del elemento: <span id="videoOpacidadLabel">100%</span></label>
+      <input type="range" id="videoOpacidad" min="0" max="100" value="100" oninput="actualizarEtiquetaOpacidad('video'); guardarMedia('video')">
       <label class="checkbox-row"><input type="checkbox" id="videoBucle" onchange="guardarMedia('video')"><span>Reproducir en bucle</span></label>
       <label class="section-title">Apariencia en el previo</label>
       <div class="row">
         <div><label>Entrada:</label><select id="videoAnimEntrada" onchange="guardarMedia('video')"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="bounce">Rebote</option><option value="zoom">Zoom</option><option value="fadeIn">Fade</option></select></div>
         <div><label>Salida:</label><select id="videoAnimSalida" onchange="guardarMedia('video')"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="zoom">Zoom</option><option value="fadeOut">Fade</option></select></div>
       </div>
-      <label>Título sobre el video:</label><input type="text" id="videoTitulo" oninput="guardarMedia('video')">
+      <label>Título sobre el video:</label><input type="text" id="videoTitulo" oninput="marcarTextoPendienteDeGuardar(() => guardarMedia('video'))">
       <label>Ubicación del título:</label><select id="videoTituloPos" onchange="guardarMedia('video')"><option value="arriba">Arriba</option><option value="abajo">Abajo</option></select>
       <div class="row">
         <div><label>Ancho (px):</label><input type="number" id="videoAncho" min="40" max="1920" oninput="guardarMedia('video')"></div>
@@ -233,16 +268,18 @@
     <div id="editor-imagen" class="editor">
       <label>Seleccionar imagen:</label>
       <div class="row"><select id="selImagen" onchange="seleccionarElemento('imagen', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('imagen')">Eliminar</button></div>
-      <label>Nombre del botón:</label><input type="text" id="imagenNombre" oninput="guardarMedia('imagen')">
+      <label>Nombre del botón:</label><input type="text" id="imagenNombre" oninput="marcarTextoPendienteDeGuardar(() => guardarMedia('imagen'))">
       <label>Archivo en public/Imagenes:</label><select id="imagenArchivo" onchange="guardarMedia('imagen')"></select>
       <p class="hint">Admite GIF animado, PNG, JPG, WebP y BMP.</p>
       <label>Audio vinculado (opcional):</label><select id="imagenAudio" onchange="guardarMedia('imagen')"></select>
       <label>Gafete vinculado (opcional):</label><select id="imagenGafete" onchange="guardarMedia('imagen')"></select>
+      <label>Opacidad del elemento: <span id="imagenOpacidadLabel">100%</span></label>
+      <input type="range" id="imagenOpacidad" min="0" max="100" value="100" oninput="actualizarEtiquetaOpacidad('imagen'); guardarMedia('imagen')">
       <div class="row">
         <div><label>Entrada:</label><select id="imagenAnimEntrada" onchange="guardarMedia('imagen')"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="bounce">Rebote</option><option value="zoom">Zoom</option><option value="fadeIn">Fade</option></select></div>
         <div><label>Salida:</label><select id="imagenAnimSalida" onchange="guardarMedia('imagen')"><option value="slideLeft">Deslizar izq.</option><option value="slideRight">Deslizar der.</option><option value="slideUp">Deslizar arriba</option><option value="zoom">Zoom</option><option value="fadeOut">Fade</option></select></div>
       </div>
-      <label>Título:</label><input type="text" id="imagenTitulo" oninput="guardarMedia('imagen')">
+      <label>Título:</label><input type="text" id="imagenTitulo" oninput="marcarTextoPendienteDeGuardar(() => guardarMedia('imagen'))">
       <label>Ubicación del título:</label><select id="imagenTituloPos" onchange="guardarMedia('imagen')"><option value="arriba">Arriba</option><option value="abajo">Abajo</option></select>
       <div class="row">
         <div><label>Ancho (px):</label><input type="number" id="imagenAncho" min="40" max="1920" oninput="guardarMedia('imagen')"></div>
@@ -259,7 +296,7 @@
     <div id="editor-pizarra" class="editor">
       <label>Seleccionar pizarra:</label>
       <div class="row"><select id="selPizarra" onchange="seleccionarElemento('pizarra', this.value)"></select><button class="btn-red delete-item" onclick="eliminarElemento('pizarra')">Eliminar</button></div>
-      <label>Nombre:</label><input type="text" id="pizarraNombre" oninput="guardarPizarra()">
+      <label>Nombre:</label><input type="text" id="pizarraNombre" oninput="marcarTextoPendienteDeGuardar(guardarPizarra)">
       <div class="row">
         <div><label>Ancho (px):</label><input type="number" id="pizarraAncho" min="40" max="1920" oninput="guardarPizarra()"></div>
         <div><label>Alto (px):</label><input type="number" id="pizarraAlto" min="40" max="1080" oninput="guardarPizarra()"></div>
@@ -272,6 +309,8 @@
         <div><label>Color del borde:</label><input type="color" id="pizarraBordeColor" oninput="guardarPizarra()"></div>
         <div><label>Grosor del borde (px):</label><input type="number" id="pizarraBordeAncho" min="0" max="30" step="1" oninput="guardarPizarra()"></div>
       </div>
+      <label>Opacidad del elemento: <span id="pizarraOpacidadLabel">100%</span></label>
+      <input type="range" id="pizarraOpacidad" min="0" max="100" value="100" oninput="actualizarEtiquetaOpacidad('pizarra'); guardarPizarra()">
       <label>Herramienta para dibujar:</label>
       <div class="board-tools" role="toolbar" aria-label="Herramientas de pizarra">
         <button class="board-tool active" type="button" data-board-tool="mover" aria-pressed="true" onclick="actualizarHerramientaPizarra('mover')">↖ Mover</button>
@@ -280,50 +319,67 @@
         <button class="board-tool" type="button" data-board-tool="rectangulo" aria-pressed="false" onclick="actualizarHerramientaPizarra('rectangulo')">□ Rectángulo</button>
         <button class="board-tool" type="button" data-board-tool="circulo" aria-pressed="false" onclick="actualizarHerramientaPizarra('circulo')">○ Círculo</button>
         <button class="board-tool" type="button" data-board-tool="borrador" aria-pressed="false" onclick="actualizarHerramientaPizarra('borrador')">⌫ Borrador</button>
+        <button class="board-tool" type="button" data-board-tool="texto" aria-pressed="false" onclick="actualizarHerramientaPizarra('texto')">T Texto</button>
+        <button class="board-tool" type="button" data-board-history="undo" onclick="deshacerPizarra()" disabled>↶ Deshacer</button>
+        <button class="board-tool" type="button" data-board-history="redo" onclick="rehacerPizarra()" disabled>↷ Rehacer</button>
       </div>
       <div class="row">
         <div><label>Color del trazo:</label><input type="color" id="pizarraColor" value="#ffffff"></div>
         <div><label>Grosor (px):</label><input type="number" id="pizarraGrosor" min="1" max="80" value="6"></div>
       </div>
-      <button class="btn-red" style="margin-top:10px;width:100%;" onclick="limpiarPizarra()">Limpiar dibujo</button>
+      <div class="row">
+        <div><label>Texto:</label><textarea id="pizarraTexto" maxlength="500" rows="2" placeholder="Escribí y luego clic en la pizarra"></textarea></div>
+        <div><label>Tamaño:</label><input type="number" id="pizarraTextoTamano" min="8" max="300" value="36"></div>
+        <div><label>Color:</label><input type="color" id="pizarraTextoColor" value="#ffffff"></div>
+      </div>
+      <button class="btn-red" style="margin-top:10px;width:100%;" onclick="limpiarPizarra()">Borrar todo el contenido dibujado</button>
       <p class="hint">Elegí una herramienta y dibujá directamente sobre la pizarra en el previo. En OBS se conserva la transparencia y el color de fondo elegidos.</p>
     </div>
   </div>
 
-  <div class="card">
-    <h3>Previo de escena</h3>
-    <div class="overlay-size-controls">
-      <label for="overlayPreset">Resolución del overlay / lienzo:</label>
-      <select id="overlayPreset" onchange="cambiarPresetOverlay()">
-        <option value="1920x1080">1920 × 1080 — Full HD (16:9)</option>
-        <option value="1280x720">1280 × 720 — HD (16:9)</option>
-        <option value="2560x1440">2560 × 1440 — QHD (16:9)</option>
-        <option value="1440x1080">1440 × 1080 — 4:3</option>
-        <option value="1080x1080">1080 × 1080 — Cuadrado (1:1)</option>
-        <option value="1080x1920">1080 × 1920 — Vertical (9:16)</option>
-        <option value="custom">Personalizada</option>
-      </select>
-      <div id="customOverlaySize" class="row" style="display:none;">
-        <div><label for="overlayWidth">Ancho (px):</label><input id="overlayWidth" type="number" min="320" max="3840" step="1"></div>
-        <div><label for="overlayHeight">Alto (px):</label><input id="overlayHeight" type="number" min="240" max="2160" step="1"></div>
-        <button class="btn-gray" type="button" onclick="aplicarTamanoOverlay()">Aplicar</button>
-      </div>
-      <p id="overlayAspectRatio" class="hint"></p>
-      <p class="hint">Configurá la fuente Navegador de OBS con estas mismas dimensiones. El previo escala los objetos según esta resolución.</p>
+  <div class="card" id="preview-card">
+    <div class="panel-heading">
+      <h3>Previo de escena</h3>
     </div>
     <div id="stage"></div>
-    <label class="checkbox-row"><input type="checkbox" id="bloquearMovimiento"><span>Bloquear movimiento en el previo</span></label>
+    <div class="preview-toolbar">
+      <div class="preview-toolbar-left">
+        <label class="checkbox-row"><input type="checkbox" id="bloquearMovimiento"><span>Bloquear movimiento</span></label>
+      </div>
+      <div class="preview-toolbar-right">
+        <div class="overlay-size-controls">
+          <select id="overlayPreset" aria-label="Resolución del overlay y lienzo" title="Resolución del overlay y lienzo" onchange="cambiarPresetOverlay()">
+            <option value="1920x1080">1920 × 1080 — Full HD (16:9)</option>
+            <option value="1280x720">1280 × 720 — HD (16:9)</option>
+            <option value="2560x1440">2560 × 1440 — QHD (16:9)</option>
+            <option value="1440x1080">1440 × 1080 — 4:3</option>
+            <option value="1080x1080">1080 × 1080 — Cuadrado (1:1)</option>
+            <option value="1080x1920">1080 × 1920 — Vertical (9:16)</option>
+            <option value="custom">Personalizada</option>
+          </select>
+          <div id="customOverlaySize" class="row" style="display:none;">
+            <div><label for="overlayWidth">Ancho (px):</label><input id="overlayWidth" type="number" min="320" max="3840" step="1"></div>
+            <div><label for="overlayHeight">Alto (px):</label><input id="overlayHeight" type="number" min="240" max="2160" step="1"></div>
+            <button class="btn-gray" type="button" onclick="aplicarTamanoOverlay()">Aplicar</button>
+          </div>
+          <p id="overlayAspectRatio" class="hint"></p>
+        </div>
+        <button class="btn-gray" type="button" title="Copiar URL para OBS" onclick="copiarRutaOverlay()">Copiar URL OBS</button>
+      </div>
+    </div>
     <div class="preview-position">
       <label>Pos X (%): <span id="lblX">0</span></label>
       <label>Pos Y (%): <span id="lblY">0</span></label>
     </div>
-    <label>Seleccionar elemento para editar o eliminar:</label>
-    <div id="stageItems" class="stage-items"></div>
-    <div class="media-panels">
-      <section class="media-panel"><h4>Botonera de audio</h4><div id="botoneraAudio"></div></section>
-      <section class="media-panel"><h4>Botonera de video</h4><div id="botoneraVideo"></div></section>
-      <section class="media-panel"><h4>Botonera de imágenes</h4><div id="botoneraImagen"></div></section>
-      <section class="media-panel"><h4>Botonera de pizarras</h4><div id="botoneraPizarra"></div></section>
+    <div id="previewLists">
+      <label>Seleccioná un elemento para editar; arrastralo para moverlo y usá el punto naranja para cambiar su tamaño:</label>
+      <div id="stageItems" class="stage-items"></div>
+      <div class="media-panels">
+        <section class="media-panel"><h4>Botonera de audio</h4><div id="botoneraAudio"></div></section>
+        <section class="media-panel"><h4>Botonera de video</h4><div id="botoneraVideo"></div></section>
+        <section class="media-panel"><h4>Botonera de imágenes</h4><div id="botoneraImagen"></div></section>
+        <section class="media-panel"><h4>Botonera de pizarras</h4><div id="botoneraPizarra"></div></section>
+      </div>
     </div>
   </div>
 
@@ -334,18 +390,36 @@
   </div>
 </div>
 
+<div id="confirmDialog" class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmDialogMessage" hidden>
+  <div class="confirm-dialog-content">
+    <p id="confirmDialogMessage"></p>
+    <div class="confirm-dialog-actions">
+      <button id="confirmDialogCancel" class="btn-gray" type="button">Cancelar</button>
+      <button id="confirmDialogAccept" class="btn-red" type="button">Continuar</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const socket = io();
   const elementos = { gafete: {}, audio: {}, video: {}, imagen: {}, pizarra: {} };
   const archivos = { audio: [], video: [], imagen: [] };
+  const confirmDialog = document.getElementById('confirmDialog');
+  let confirmDialogResolve = null;
+  let confirmDialogPreviousFocus = null;
   let overlaySize = { width: 1920, height: 1080 };
   let tipoSeleccionado = null;
   let idSeleccionado = null;
   let herramientaPizarra = 'mover';
   let dragging = false;
+  let resizing = null;
   let positionSaveTimer = null;
   let dibujoActivo = null;
+  let pendingCreateFocus = null;
   const boardDrawingSources = new WeakMap();
+  const boardHistories = new Map();
+  const boardHistoryLimit = 10;
+  let pendingBoardFocusId = null;
 
   function collection(type) {
     return type === 'gafete' ? elementos.gafete : elementos[type];
@@ -370,12 +444,21 @@
     render();
   });
   socket.on('sync-medios', data => {
+    const previousBoardIds = Object.keys(elementos.pizarra);
     elementos.audio = data && data.audios ? data.audios : {};
     elementos.video = data && data.videos ? data.videos : {};
     elementos.imagen = data && data.imagenes ? data.imagenes : {};
     elementos.pizarra = data && data.pizarras ? data.pizarras : {};
+    previousBoardIds.forEach(id => {
+      if (!elementos.pizarra[id]) boardHistories.delete(id);
+    });
     maintainSelection();
     render();
+    if (pendingBoardFocusId) {
+      const board = elementos.pizarra[pendingBoardFocusId];
+      if (board && board.activo) enfocarCanvasPizarra(pendingBoardFocusId);
+      pendingBoardFocusId = null;
+    }
   });
   socket.on('sync-overlay-size', size => {
     overlaySize = size && Number.isInteger(size.width) && Number.isInteger(size.height)
@@ -388,10 +471,31 @@
     tipoSeleccionado = tipo;
     idSeleccionado = id;
     render();
+    if (pendingCreateFocus && pendingCreateFocus.tipo === tipo) {
+      const createButton = pendingCreateFocus.button;
+      pendingCreateFocus = null;
+      if (document.activeElement === createButton || document.activeElement === document.body) {
+        const focusTargets = {
+          gafete: 'linea1',
+          audio: 'audioNombre',
+          video: 'videoNombre',
+          imagen: 'imagenNombre',
+          pizarra: 'pizarraNombre'
+        };
+        document.getElementById(focusTargets[tipo]).focus();
+      }
+    }
   });
   socket.on('error-control', message => setStatus(message, true));
   socket.on('media-error', data => {
     setStatus(`No se pudo reproducir ${data.tipo}: ${data.message}`, true);
+  });
+  socket.on('connect', () => setStatus('Conectado al servidor.'));
+  socket.on('disconnect', () => {
+    setStatus('Se perdió la conexión con el servidor. Verificá que esté ejecutándose.', true);
+  });
+  socket.on('connect_error', error => {
+    setStatus(`No se pudo conectar con el servidor: ${error.message}`, true);
   });
 
   function maintainSelection() {
@@ -549,6 +653,8 @@
     setValue('bgAlpha', g.bgAlpha ?? 85);
     setValue('borderColor', g.borderColor || '#3b82f6');
     setValue('borderWidth', g.borderWidth ?? 2);
+    setValue('gafeteOpacidad', g.opacidad ?? 100);
+    actualizarEtiquetaOpacidad('gafete');
     setValue('animEntrada', g.animEntrada || 'slideLeft');
     setValue('animSalida', g.animSalida || 'slideLeft');
     setValue('timerSeconds', g.timerSeconds ?? 0);
@@ -568,6 +674,7 @@
   function renderVideoEditor(video) {
     setValue('videoNombre', video.nombre);
     setValue('videoVolumen', video.volumen ?? 80);
+    setValue('videoOpacidad', video.opacidad ?? 100);
     setChecked('videoBucle', video.bucle);
     setValue('videoTitulo', video.titulo);
     setValue('videoTituloPos', video.tituloPos || 'arriba');
@@ -581,10 +688,12 @@
     populateFileSelect('video');
     populateBadgeSelect('video');
     actualizarEtiquetaVolumen('video');
+    actualizarEtiquetaOpacidad('video');
   }
 
   function renderImageEditor(image) {
     setValue('imagenNombre', image.nombre);
+    setValue('imagenOpacidad', image.opacidad ?? 100);
     setValue('imagenTitulo', image.titulo);
     setValue('imagenTituloPos', image.tituloPos || 'arriba');
     setValue('imagenAncho', image.ancho ?? 320);
@@ -597,6 +706,7 @@
     populateFileSelect('imagen');
     populateBadgeSelect('imagen');
     populateImageAudioSelect(image);
+    actualizarEtiquetaOpacidad('imagen');
   }
 
   function renderPizarraEditor(board) {
@@ -607,11 +717,14 @@
     setValue('pizarraFondoAlpha', board.fondoAlpha ?? 0);
     setValue('pizarraBordeColor', board.bordeColor || '#38bdf8');
     setValue('pizarraBordeAncho', board.bordeAncho ?? 2);
+    setValue('pizarraOpacidad', board.opacidad ?? 100);
+    actualizarEtiquetaOpacidad('pizarra');
     actualizarHerramientaPizarra();
+    actualizarEstadoHistorialPizarra();
   }
 
   function styleBadge(box, item, preview) {
-    const scale = preview ? escalaPrevio() : 1;
+    const scale = (preview ? escalaPrevio() : 1) * (item.escala ?? 1);
     box.style.left = `${item.posX || 0}%`;
     box.style.top = `${item.posY || 0}%`;
     const borderRadius = Number.parseFloat(item.borderRadius) || 0;
@@ -620,6 +733,7 @@
     box.style.borderWidth = `${(item.borderWidth ?? 2) * scale}px`;
     box.style.borderColor = item.borderColor || '#3b82f6';
     box.style.backgroundColor = colorWithAlpha(item.bgColor || '#0f172a', item.bgAlpha ?? 85);
+    box.style.filter = `opacity(${item.opacidad ?? 100}%)`;
     box.style.padding = `${8 * scale}px ${14 * scale}px`;
     box.style.gap = `${10 * scale}px`;
     box.className = `prev-box logo-${item.logoPos || 'left'} ${item.id === idSeleccionado && tipoSeleccionado === 'gafete' ? 'selected' : ''}`;
@@ -634,6 +748,16 @@
     if (preview) {
       box.style.transform = 'translate(-50%, -50%) scale(1)';
     }
+  }
+
+  function ensureResizeHandle(element) {
+    if (element.querySelector('.resize-handle')) return;
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'resize-handle';
+    handle.title = 'Arrastrar para cambiar el tamaño';
+    handle.setAttribute('aria-label', 'Cambiar tamaño del elemento');
+    element.appendChild(handle);
   }
 
   function createVideoPreview(video) {
@@ -677,12 +801,16 @@
     el.dataset.id = board.id;
     const drawing = document.createElement('canvas');
     drawing.className = 'board-drawing';
+    drawing.getContext('2d', { willReadFrequently: true });
+    drawing.tabIndex = 0;
+    drawing.setAttribute('aria-label', `Lienzo de dibujo: ${board.nombre || 'pizarra'}`);
     el.appendChild(drawing);
     return el;
   }
 
   function styleVideoPreview(el, video) {
     const scale = escalaPrevio();
+    el.style.filter = `opacity(${video.opacidad ?? 100}%)`;
     el.style.left = `${video.posX ?? 50}%`;
     el.style.top = `${video.posY ?? 50}%`;
     const previewWidth = (video.ancho || 320) * scale;
@@ -716,6 +844,7 @@
 
   function styleImagePreview(el, image) {
     const scale = escalaPrevio();
+    el.style.filter = `opacity(${image.opacidad ?? 100}%)`;
     el.style.left = `${image.posX ?? 50}%`;
     el.style.top = `${image.posY ?? 50}%`;
     const previewWidth = (image.ancho || 320) * scale;
@@ -749,6 +878,7 @@
 
   function styleBoardPreview(el, board) {
     const scale = escalaPrevio();
+    el.style.filter = `opacity(${board.opacidad ?? 100}%)`;
     el.style.left = `${board.posX ?? 50}%`;
     el.style.top = `${board.posY ?? 50}%`;
     el.style.width = `${(board.ancho || 640) * scale}px`;
@@ -760,17 +890,30 @@
     const canvas = el.querySelector('canvas');
     const width = board.ancho || 640;
     const height = board.alto || 360;
-    if (canvas.width !== width) canvas.width = width;
-    if (canvas.height !== height) canvas.height = height;
+    const resized = canvas.width !== width || canvas.height !== height;
+    if (resized) {
+      const previousCanvas = document.createElement('canvas');
+      previousCanvas.width = canvas.width;
+      previousCanvas.height = canvas.height;
+      previousCanvas.getContext('2d').drawImage(canvas, 0, 0);
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(previousCanvas, 0, 0, width, height);
+      boardHistories.delete(board.id);
+    }
+    canvas.setAttribute('aria-label', `Lienzo de dibujo: ${board.nombre || 'pizarra'}`);
     canvas.style.cursor = tipoSeleccionado === 'pizarra'
       ? herramientaPizarra === 'mover' ? 'move' : 'crosshair'
       : 'pointer';
-    if (boardDrawingSources.get(canvas) !== (board.dibujo || '')) {
-      boardDrawingSources.set(canvas, board.dibujo || '');
-      if (board.dibujo) {
+    const drawingSource = board.dibujo || '';
+    const sourceChanged = boardDrawingSources.get(canvas) !== drawingSource;
+    if (sourceChanged) {
+      boardDrawingSources.set(canvas, drawingSource);
+      if (drawingSource) {
+        boardHistories.delete(board.id);
         const image = new Image();
         image.onload = () => {
-          if (boardDrawingSources.get(canvas) === board.dibujo) {
+          if (boardDrawingSources.get(canvas) === drawingSource) {
             canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
             canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
           }
@@ -778,8 +921,10 @@
         image.src = board.dibujo;
       } else {
         canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+        if (!boardDrawingSources.has(canvas)) boardHistories.delete(board.id);
       }
     }
+    actualizarEstadoHistorialPizarra();
   }
 
   function renderStage() {
@@ -795,6 +940,7 @@
         stage.appendChild(node);
       }
       styleVideoPreview(node, video);
+      ensureResizeHandle(node);
     });
     Object.values(elementos.imagen).forEach(image => {
       const key = `imagen:${image.id}`;
@@ -806,6 +952,7 @@
         stage.appendChild(node);
       }
       styleImagePreview(node, image);
+      ensureResizeHandle(node);
     });
     Object.values(elementos.pizarra).forEach(board => {
       const key = `pizarra:${board.id}`;
@@ -817,6 +964,7 @@
         stage.appendChild(node);
       }
       styleBoardPreview(node, board);
+      ensureResizeHandle(node);
     });
     Object.values(elementos.gafete).forEach(item => {
       const key = `gafete:${item.id}`;
@@ -828,6 +976,7 @@
         stage.appendChild(node);
       }
       styleBadge(node, item, true);
+      ensureResizeHandle(node);
     });
     Array.from(stage.children).forEach(node => {
       if (!wanted.has(node.dataset.key)) node.remove();
@@ -912,6 +1061,10 @@
     button.textContent = item.activo ? 'REPRODUCIENDO (clic para detener)' : 'REPRODUCIR';
     button.onclick = () => {
       setStatus('');
+      if (type === 'pizarra') {
+        seleccionarElemento('pizarra', item.id);
+        pendingBoardFocusId = item.activo ? null : item.id;
+      }
       socket.emit('toggle-media', { tipo: type, id: item.id });
     };
     const remove = document.createElement('button');
@@ -935,7 +1088,7 @@
       wrapper.className = `bot-item${controller ? ' linked-badge' : ''}`;
       const label = document.createElement('div');
       label.style.cssText = 'font-size:12px;font-weight:bold;margin-bottom:4px;';
-      label.textContent = `${item.emojiIcono || '🏷️'} ${item.nombreGafete || item.id}${item.usarCiclo ? ' 🔄' : ''}`;
+      label.textContent = `${item.emojiIcono || '🏷️'} ${item.nombreGafete || item.id}${item.usarCiclo ? item.cicloPausado ? ' ⏸️' : ' 🔄' : ''}`;
       wrapper.appendChild(label);
       if (controller) {
         const linked = document.createElement('div');
@@ -945,7 +1098,7 @@
       }
       const button = document.createElement('button');
       button.className = `btn-gray${item.visibilidad ? ' active' : ''}`;
-      button.style.width = '100%';
+      button.style.flex = '1';
       button.textContent = controller
         ? item.visibilidad ? 'VISIBLE POR EL MEDIO' : 'CONTROLADO POR EL MEDIO'
         : item.visibilidad ? 'EN PANTALLA (clic para ocultar)' : 'MOSTRAR EN OBS';
@@ -954,13 +1107,24 @@
       button.onclick = () => socket.emit('toggle-visibilidad', item.id);
       const controls = document.createElement('div');
       controls.className = 'media-toggle-row';
+      controls.appendChild(button);
+      if (item.usarCiclo && !controller) {
+        const cycleButton = document.createElement('button');
+        cycleButton.className = `btn-gray${item.cicloPausado ? '' : ' active'}`;
+        cycleButton.textContent = item.cicloPausado ? 'INICIAR CICLO' : 'PAUSAR CICLO';
+        cycleButton.title = item.cicloPausado
+          ? 'Reanudar la aparición y ocultación automáticas.'
+          : 'Pausar el ciclo para poder mantener el gafete oculto manualmente.';
+        cycleButton.onclick = () => socket.emit('toggle-ciclo-gafete', item.id);
+        controls.appendChild(cycleButton);
+      }
       const remove = document.createElement('button');
       remove.className = 'btn-red delete-item';
       remove.textContent = '×';
       remove.title = `Eliminar ${item.nombreGafete || item.id}`;
       remove.setAttribute('aria-label', remove.title);
       remove.onclick = () => eliminarElemento('gafete', item.id);
-      controls.append(button, remove);
+      controls.appendChild(remove);
       wrapper.appendChild(controls);
       badgePanel.appendChild(wrapper);
     });
@@ -1042,22 +1206,87 @@
     render();
   }
 
-  function crearElemento(type) {
+  async function crearElemento(type) {
+    if (!socket.connected) {
+      setStatus('No hay conexión con el servidor; no se pueden agregar elementos.', true);
+      return;
+    }
     if (type === 'gafete') {
+      pendingCreateFocus = { tipo: type, button: document.activeElement };
       socket.emit('crear-gafete');
       return;
     }
     if (type === 'pizarra') {
+      pendingCreateFocus = { tipo: type, button: document.activeElement };
       socket.emit('crear-pizarra');
       return;
+    }
+    if (!archivos[type].length) {
+      try {
+        await cargarArchivos(type);
+      } catch (error) {
+        setStatus(error.message, true);
+        return;
+      }
     }
     if (!archivos[type].length) {
       setStatus(`No hay archivos compatibles en public/${type}.`, true);
       return;
     }
+    pendingCreateFocus = { tipo: type, button: document.activeElement };
     socket.emit('crear-media', { tipo: type, nombreArchivo: archivos[type][0].nombre });
     setStatus('');
   }
+
+  let pendingTextSave = null;
+
+  function confirmarAccion(message, acceptLabel = 'Continuar') {
+    document.getElementById('confirmDialogMessage').textContent = message;
+    document.getElementById('confirmDialogAccept').textContent = acceptLabel;
+    return new Promise(resolve => {
+      confirmDialogResolve = resolve;
+      confirmDialogPreviousFocus = document.activeElement;
+      confirmDialog.hidden = false;
+      document.getElementById('confirmDialogCancel').focus();
+    });
+  }
+
+  function cerrarConfirmacion(accepted) {
+    if (!confirmDialogResolve) return;
+    const resolve = confirmDialogResolve;
+    const previousFocus = confirmDialogPreviousFocus;
+    confirmDialogResolve = null;
+    confirmDialogPreviousFocus = null;
+    confirmDialog.hidden = true;
+    if (previousFocus instanceof HTMLElement && previousFocus.isConnected && !previousFocus.closest('[hidden]')) {
+      previousFocus.focus();
+    }
+    resolve(accepted);
+  }
+
+  document.getElementById('confirmDialogCancel').addEventListener('click', () => cerrarConfirmacion(false));
+  document.getElementById('confirmDialogAccept').addEventListener('click', () => cerrarConfirmacion(true));
+  confirmDialog.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cerrarConfirmacion(false);
+    }
+  });
+
+  function flushTextSave() {
+    const save = pendingTextSave;
+    pendingTextSave = null;
+    if (save) save();
+  }
+
+  function marcarTextoPendienteDeGuardar(save) {
+    pendingTextSave = save;
+  }
+
+  document.addEventListener('focusout', event => {
+    if (event.target.matches('input[type="text"]')) flushTextSave();
+  });
+  window.addEventListener('blur', flushTextSave);
 
   function guardarGafete() {
     const g = entity('gafete');
@@ -1086,6 +1315,7 @@
       bgAlpha: Number(document.getElementById('bgAlpha').value),
       borderColor: document.getElementById('borderColor').value,
       borderWidth: Number(document.getElementById('borderWidth').value),
+      opacidad: Number(document.getElementById('gafeteOpacidad').value),
       animEntrada: document.getElementById('animEntrada').value,
       animSalida: document.getElementById('animSalida').value,
       timerSeconds: Number(document.getElementById('timerSeconds').value),
@@ -1111,6 +1341,7 @@
       item.archivo = document.getElementById('videoArchivo').value || item.archivo;
       item.gafeteId = document.getElementById('videoGafete').value || null;
       item.volumen = Number(document.getElementById('videoVolumen').value);
+      item.opacidad = Number(document.getElementById('videoOpacidad').value);
       item.bucle = document.getElementById('videoBucle').checked;
       item.animEntrada = document.getElementById('videoAnimEntrada').value;
       item.animSalida = document.getElementById('videoAnimSalida').value;
@@ -1126,6 +1357,7 @@
       item.archivo = document.getElementById('imagenArchivo').value || item.archivo;
       item.audioId = document.getElementById('imagenAudio').value || null;
       item.gafeteId = document.getElementById('imagenGafete').value || null;
+      item.opacidad = Number(document.getElementById('imagenOpacidad').value);
       item.animEntrada = document.getElementById('imagenAnimEntrada').value;
       item.animSalida = document.getElementById('imagenAnimSalida').value;
       item.titulo = document.getElementById('imagenTitulo').value;
@@ -1150,12 +1382,13 @@
     board.fondoAlpha = Number(document.getElementById('pizarraFondoAlpha').value);
     board.bordeColor = document.getElementById('pizarraBordeColor').value;
     board.bordeAncho = Number(document.getElementById('pizarraBordeAncho').value);
+    board.opacidad = Number(document.getElementById('pizarraOpacidad').value);
     renderStage();
     socket.emit('guardar-pizarra', { ...board });
   }
 
   function actualizarHerramientaPizarra(tool = herramientaPizarra) {
-    if (['mover', 'lapiz', 'linea', 'rectangulo', 'circulo', 'borrador'].includes(tool)) {
+    if (['mover', 'lapiz', 'linea', 'rectangulo', 'circulo', 'borrador', 'texto'].includes(tool)) {
       herramientaPizarra = tool;
     }
     document.querySelectorAll('[data-board-tool]').forEach(button => {
@@ -1163,20 +1396,96 @@
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
-    if (tipoSeleccionado === 'pizarra') renderStage();
+    if (tipoSeleccionado === 'pizarra') {
+      renderStage();
+      enfocarCanvasPizarra(idSeleccionado);
+    }
+    actualizarEstadoHistorialPizarra();
+  }
+
+  function enfocarCanvasPizarra(id) {
+    requestAnimationFrame(() => {
+      const canvas = document.querySelector(`[data-key="${CSS.escape(`pizarra:${id}`)}"] canvas`);
+      if (canvas && canvas.getClientRects().length) canvas.focus({ preventScroll: true });
+    });
+  }
+
+  function historialPizarra(id) {
+    if (!boardHistories.has(id)) boardHistories.set(id, { undo: [], redo: [] });
+    return boardHistories.get(id);
+  }
+
+  function registrarDeshacerPizarra(id, snapshot) {
+    const history = historialPizarra(id);
+    history.undo.push(snapshot);
+    if (history.undo.length > boardHistoryLimit) history.undo.shift();
+    history.redo = [];
+    actualizarEstadoHistorialPizarra();
+  }
+
+  function actualizarEstadoHistorialPizarra() {
+    const history = idSeleccionado && tipoSeleccionado === 'pizarra'
+      ? boardHistories.get(idSeleccionado)
+      : null;
+    const buttons = document.querySelectorAll('[data-board-history]');
+    buttons.forEach(button => {
+      button.disabled = button.dataset.boardHistory === 'undo'
+        ? !history || !history.undo.length
+        : !history || !history.redo.length;
+    });
+  }
+
+  function guardarCanvasPizarra(board, canvas) {
+    try {
+      board.dibujo = canvas.toDataURL('image/png');
+      boardDrawingSources.set(canvas, board.dibujo);
+      socket.emit('guardar-pizarra', { ...board });
+      setStatus('Pizarra guardada.');
+      return true;
+    } catch (error) {
+      setStatus(`No se pudo guardar el contenido de la pizarra: ${error.message}`, true);
+      return false;
+    }
+  }
+
+  function aplicarHistorialPizarra(direction) {
+    const board = entity('pizarra');
+    if (!board) return;
+    const canvas = document.querySelector(`[data-key="${CSS.escape(`pizarra:${board.id}`)}"] canvas`);
+    const history = boardHistories.get(board.id);
+    const source = history && history[direction];
+    const destination = history && history[direction === 'undo' ? 'redo' : 'undo'];
+    if (!canvas || !source || !source.length) return;
+    try {
+      destination.push(canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height));
+      const previous = source.pop();
+      canvas.getContext('2d').putImageData(previous, 0, 0);
+      guardarCanvasPizarra(board, canvas);
+      actualizarEstadoHistorialPizarra();
+      enfocarCanvasPizarra(board.id);
+    } catch (error) {
+      setStatus(`No se pudo ${direction === 'undo' ? 'deshacer' : 'rehacer'}: ${error.message}`, true);
+    }
+  }
+
+  function deshacerPizarra() {
+    aplicarHistorialPizarra('undo');
+  }
+
+  function rehacerPizarra() {
+    aplicarHistorialPizarra('redo');
   }
 
   function limpiarPizarra() {
     const board = entity('pizarra');
     if (!board) return;
-    board.dibujo = '';
     const canvas = document.querySelector(`[data-key="${CSS.escape(`pizarra:${board.id}`)}"] canvas`);
-    if (canvas) {
-      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-      boardDrawingSources.set(canvas, '');
-    }
-    socket.emit('guardar-pizarra', { ...board });
-    setStatus('Dibujo de la pizarra borrado.');
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    registrarDeshacerPizarra(board.id, context.getImageData(0, 0, canvas.width, canvas.height));
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    guardarCanvasPizarra(board, canvas);
+    setStatus('Se borró todo el contenido dibujado de la pizarra.');
   }
 
   function drawBoardShape(context, tool, start, end) {
@@ -1200,21 +1509,16 @@
     dibujoActivo = null;
     const board = elementos.pizarra[drawing.id];
     if (!board) return;
-    try {
-      board.dibujo = drawing.canvas.toDataURL('image/png');
-      boardDrawingSources.set(drawing.canvas, board.dibujo);
-      socket.emit('guardar-pizarra', { ...board });
-      setStatus('Dibujo guardado.');
-    } catch (error) {
-      setStatus(`No se pudo guardar el dibujo: ${error.message}`, true);
-    }
+    registrarDeshacerPizarra(drawing.id, drawing.snapshot);
+    guardarCanvasPizarra(board, drawing.canvas);
+    enfocarCanvasPizarra(drawing.id);
   }
 
-  function eliminarElemento(type, id = idSeleccionado) {
+  async function eliminarElemento(type, id = idSeleccionado) {
     const item = id ? collection(type)[id] : null;
     if (!item) return;
     const name = type === 'gafete' ? item.nombreGafete || item.id : item.nombre || item.id;
-    if (!window.confirm(`¿Eliminar "${name}"?`)) return;
+    if (!await confirmarAccion(`¿Eliminar "${name}"?`, 'Eliminar')) return;
     if (type === 'gafete') socket.emit('eliminar-gafete', id);
     else socket.emit('eliminar-media', { tipo: type, id });
     if (tipoSeleccionado === type && idSeleccionado === id) {
@@ -1223,8 +1527,8 @@
     }
   }
 
-  function nuevaConfiguracion() {
-    if (!window.confirm('Empezar una configuración nueva borrará todos los gafetes, medios y pizarras guardados y restablecerá la resolución a 1920 × 1080. Los archivos de audio, video e imagen no se borrarán. ¿Continuar?')) return;
+  async function nuevaConfiguracion() {
+    if (!await confirmarAccion('Empezar una configuración nueva borrará todos los gafetes, medios y pizarras guardados y restablecerá la resolución a 1920 × 1080. Los archivos de audio, video e imagen no se borrarán. ¿Continuar?', 'Empezar de nuevo')) return;
     socket.emit('nueva-configuracion', result => {
       if (!result || !result.ok) {
         setStatus('No se pudo iniciar una configuración nueva.', true);
@@ -1247,6 +1551,33 @@
   actualizarControlesTamanoOverlay();
   new ResizeObserver(() => renderStage()).observe(stage);
   stage.addEventListener('pointerdown', event => {
+    const resizeHandle = event.target.closest('.resize-handle');
+    if (resizeHandle) {
+      const target = resizeHandle.closest('[data-kind][data-id]');
+      if (!target) return;
+      tipoSeleccionado = target.dataset.kind;
+      idSeleccionado = target.dataset.id;
+      render();
+      const item = collection(tipoSeleccionado)[idSeleccionado];
+      const node = stage.querySelector(`[data-key="${CSS.escape(`${tipoSeleccionado}:${idSeleccionado}`)}"]`);
+      if (!item || !node) return;
+      const bounds = node.getBoundingClientRect();
+      resizing = {
+        type: tipoSeleccionado,
+        id: idSeleccionado,
+        startX: event.clientX,
+        startY: event.clientY,
+        previewScale: escalaPrevio(),
+        startWidth: bounds.width,
+        startHeight: bounds.height,
+        width: item.ancho,
+        height: item.alto,
+        scale: item.escala ?? 1
+      };
+      stage.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      return;
+    }
     const target = event.target.closest('[data-kind][data-id]');
     if (!target) return;
     const type = target.dataset.kind;
@@ -1268,6 +1599,29 @@
           y: Math.max(0, Math.min(canvas.height, (event.clientY - rect.top) * scaleY))
         };
         const context = canvas.getContext('2d');
+        if (tool === 'texto') {
+          const text = document.getElementById('pizarraTexto').value;
+          if (!text.trim()) {
+            setStatus('Escribí el texto antes de colocarlo en la pizarra.', true);
+            document.getElementById('pizarraTexto').focus();
+            return;
+          }
+          const snapshot = context.getImageData(0, 0, canvas.width, canvas.height);
+          const fontSize = Math.max(8, Math.min(300, Number(document.getElementById('pizarraTextoTamano').value) || 36));
+          const lines = text.split(/\r?\n/);
+          context.save();
+          context.globalCompositeOperation = 'source-over';
+          context.fillStyle = document.getElementById('pizarraTextoColor').value;
+          context.font = `${fontSize}px system-ui, sans-serif`;
+          context.textBaseline = 'top';
+          lines.forEach((line, index) => context.fillText(line, point.x, point.y + index * fontSize * 1.2));
+          context.restore();
+          registrarDeshacerPizarra(id, snapshot);
+          guardarCanvasPizarra(elementos.pizarra[id], canvas);
+          enfocarCanvasPizarra(id);
+          event.preventDefault();
+          return;
+        }
         dibujoActivo = {
           id,
           tool,
@@ -1278,6 +1632,7 @@
           snapshot: context.getImageData(0, 0, canvas.width, canvas.height)
         };
         canvas.setPointerCapture(event.pointerId);
+        canvas.focus({ preventScroll: true });
         if (tool === 'lapiz' || tool === 'borrador') {
           context.beginPath();
           context.moveTo(point.x, point.y);
@@ -1286,12 +1641,48 @@
         return;
       }
     }
+    if (type === 'pizarra') {
+      const canvas = stage.querySelector(`[data-key="${CSS.escape(`pizarra:${id}`)}"] canvas`);
+      if (canvas) canvas.focus({ preventScroll: true });
+    }
     dragging = !document.getElementById('bloquearMovimiento').checked;
     if (dragging) stage.setPointerCapture(event.pointerId);
     event.preventDefault();
   });
 
   stage.addEventListener('pointermove', event => {
+    if (resizing) {
+      const item = collection(resizing.type)[resizing.id];
+      if (!item) return;
+      const deltaX = event.clientX - resizing.startX;
+      const deltaY = event.clientY - resizing.startY;
+      if (resizing.type === 'gafete') {
+        const width = Math.max(1, resizing.startWidth);
+        item.escala = Math.max(0.5, Math.min(3, resizing.scale * (width + deltaX) / width));
+      } else {
+        const width = resizing.width || (resizing.type === 'pizarra' ? 640 : 320);
+        const height = resizing.height || (resizing.type === 'pizarra' ? 360 : 180);
+        if (item.forma === 'circulo') {
+          const diameter = Math.max(40, Math.min(1920,
+            Math.max(width + deltaX / resizing.previewScale, height + deltaY / resizing.previewScale)));
+          item.ancho = Math.round(diameter);
+          item.alto = Math.round(diameter);
+        } else {
+          item.ancho = Math.max(40, Math.min(1920, Math.round(width + deltaX / resizing.previewScale)));
+          item.alto = Math.max(40, Math.min(1080, Math.round(height + deltaY / resizing.previewScale)));
+        }
+        if (resizing.type === 'video' || resizing.type === 'imagen') {
+          document.getElementById(`${resizing.type}Ancho`).value = item.ancho;
+          document.getElementById(`${resizing.type}Alto`).value = item.alto;
+        } else {
+          document.getElementById('pizarraAncho').value = item.ancho;
+          document.getElementById('pizarraAlto').value = item.alto;
+        }
+      }
+      renderStage();
+      event.preventDefault();
+      return;
+    }
     if (dibujoActivo) {
       const { canvas, context, tool, start, snapshot } = dibujoActivo;
       const rect = canvas.getBoundingClientRect();
@@ -1336,12 +1727,26 @@
       else socket.emit('guardar-media', { tipo: tipoSeleccionado, data: { ...item } });
     }, 80);
   });
+  function guardarRedimension() {
+    if (!resizing) return;
+    const { type, id } = resizing;
+    const item = collection(type)[id];
+    if (item) {
+      if (type === 'gafete') socket.emit('guardar-gafete', { id, escala: item.escala });
+      else if (type === 'pizarra') socket.emit('guardar-pizarra', { ...item });
+      else socket.emit('guardar-media', { tipo: type, data: { ...item } });
+    }
+    resizing = null;
+  }
+
   stage.addEventListener('pointerup', () => {
     if (dibujoActivo) commitBoardDrawing();
+    guardarRedimension();
     dragging = false;
   });
   stage.addEventListener('pointercancel', () => {
     if (dibujoActivo) commitBoardDrawing();
+    guardarRedimension();
     dragging = false;
   });
 
@@ -1350,10 +1755,25 @@
     document.getElementById(`${type}VolumenLabel`).textContent = `${value}%`;
   }
 
+  function actualizarEtiquetaOpacidad(type) {
+    const value = document.getElementById(`${type}Opacidad`).value;
+    document.getElementById(`${type}OpacidadLabel`).textContent = `${value}%`;
+  }
+
   function setStatus(message, error = false) {
     const status = document.getElementById('editorStatus');
     status.textContent = message || '';
     status.classList.toggle('error', error);
+  }
+
+  async function copiarRutaOverlay() {
+    const url = `${window.location.origin}/overlay.html`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus(`URL del overlay copiada: ${url}`);
+    } catch (error) {
+      setStatus(`No se pudo copiar la URL del overlay: ${error.message}`, true);
+    }
   }
 
   async function cargarArchivos(type) {
@@ -1402,7 +1822,7 @@
     const file = input.files && input.files[0];
     if (!file) return;
     input.value = '';
-    if (!window.confirm('Importar esta configuración reemplazará todos los gafetes, medios, pizarras y la resolución actual del overlay. ¿Continuar?')) return;
+    if (!await confirmarAccion('Importar esta configuración reemplazará todos los gafetes, medios, pizarras y la resolución actual del overlay. ¿Continuar?', 'Importar')) return;
     try {
       const config = JSON.parse(await file.text());
       socket.emit('importar-configuracion', config, result => {
