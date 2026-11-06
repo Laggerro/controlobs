@@ -1,11 +1,13 @@
 {
   "name": "controlobs",
   "version": "1.0.0",
-  "description": "",
-  "main": "server.js",
+  "description": "Control local de gafetes y medios para OBS",
+  "main": "electron/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "app": "electron .",
+    "dist": "electron-builder --win nsis"
   },
   "repository": {
     "type": "git",
@@ -24,5 +26,30 @@
     "emoji-picker-element-data": "^1.8.0",
     "express": "^5.2.1",
     "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.laggerro.controlobs",
+    "productName": "ControlOBS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "public/**/*",
+      "server.js",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

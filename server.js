@@ -12,12 +12,15 @@ const dataDir = process.env.CONTROLOBS_DATA_DIR
   ? path.resolve(process.env.CONTROLOBS_DATA_DIR)
   : path.join(__dirname, 'data');
 const statePath = path.join(dataDir, 'controlobs.json');
+const mediaRoot = process.env.CONTROLOBS_MEDIA_DIR
+  ? path.resolve(process.env.CONTROLOBS_MEDIA_DIR)
+  : publicDir;
 const emojiPickerDir = path.join(__dirname, 'node_modules', 'emoji-picker-element');
 const emojiDataPath = path.join(__dirname, 'node_modules', 'emoji-picker-element-data', 'es', 'cldr', 'data.json');
 const mediaDirectories = {
-  audio: path.join(publicDir, 'audio'),
-  video: path.join(publicDir, 'video'),
-  imagen: path.join(publicDir, 'Imagenes')
+  audio: path.join(mediaRoot, 'audio'),
+  video: path.join(mediaRoot, 'video'),
+  imagen: path.join(mediaRoot, 'Imagenes')
 };
 const mediaExtensions = {
   audio: new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac']),
@@ -43,14 +46,22 @@ function detectImageContentType(filePath) {
   return null;
 }
 
+function setImageHeaders(response, filePath) {
+  const contentType = detectImageContentType(filePath);
+  if (contentType) response.setHeader('Content-Type', contentType);
+}
+
+if (mediaRoot !== publicDir) {
+  app.use('/audio', express.static(mediaDirectories.audio));
+  app.use('/video', express.static(mediaDirectories.video));
+  app.use('/Imagenes', express.static(mediaDirectories.imagen, { setHeaders: setImageHeaders }));
+}
 app.use(express.static(publicDir, {
   setHeaders(response, filePath) {
     if (path.basename(filePath) === 'overlay.html') {
       response.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
-    if (path.dirname(filePath) !== mediaDirectories.imagen) return;
-    const contentType = detectImageContentType(filePath);
-    if (contentType) response.setHeader('Content-Type', contentType);
+    if (path.dirname(filePath) === mediaDirectories.imagen) setImageHeaders(response, filePath);
   }
 }));
 app.use('/vendor/emoji-picker-element', express.static(emojiPickerDir));
@@ -80,6 +91,8 @@ const initialState = {
       logoPos: 'left',
       bgColor: '#0f172a',
       bgAlpha: 85,
+      opacidad: 100,
+      escala: 1,
       borderColor: '#3b82f6',
       borderWidth: 2,
       borderRadius: '12px',
@@ -92,7 +105,8 @@ const initialState = {
       usarCiclo: false,
       tiempoOculto: 3,
       visibilidadManual: false,
-      visibilidad: false
+      visibilidad: false,
+      cicloPausado: false
     }
   },
   audios: {},
@@ -116,6 +130,9 @@ state.imagenes = state.imagenes && typeof state.imagenes === 'object' ? state.im
 state.pizarras = state.pizarras && typeof state.pizarras === 'object' ? state.pizarras : {};
 state.overlaySize = normalizeOverlaySize(state.overlaySize);
 Object.values(state.gafetes).forEach(badge => {
+  badge.opacidad = clampNumber(badge.opacidad, 100, 0, 100);
+  badge.escala = clampNumber(badge.escala, 1, 0.5, 3);
+  badge.cicloPausado = Boolean(badge.cicloPausado);
   badge.visibilidadManual = Boolean(badge.visibilidadManual ?? badge.visibilidad);
   badge.visibilidad = badge.visibilidadManual;
 });
@@ -124,12 +141,14 @@ Object.values(state.audios).forEach(audio => {
   audio.gafeteId = audio.gafeteId || null;
 });
 Object.values(state.videos).forEach(video => {
+  video.opacidad = clampNumber(video.opacidad, 100, 0, 100);
   video.activo = false;
   video.gafeteId = video.gafeteId || null;
   video.animEntrada = video.animEntrada || 'fadeIn';
   video.animSalida = video.animSalida || 'fadeOut';
 });
 Object.values(state.imagenes).forEach(image => {
+  image.opacidad = clampNumber(image.opacidad, 100, 0, 100);
   image.activo = false;
   image.gafeteId = image.gafeteId || null;
   image.audioId = image.audioId || null;
@@ -137,6 +156,7 @@ Object.values(state.imagenes).forEach(image => {
   image.animSalida = image.animSalida || 'fadeOut';
 });
 Object.values(state.pizarras).forEach(board => {
+  board.opacidad = clampNumber(board.opacidad, 100, 0, 100);
   board.activo = false;
   board.dibujo = typeof board.dibujo === 'string' ? board.dibujo : '';
   board.bordeColor = validHexColor(board.bordeColor) ? board.bordeColor : '#38bdf8';
@@ -309,7 +329,7 @@ function gestionarCiclo(id) {
   const g = state.gafetes[id];
   if (!g) return;
   if (cicloTimers[id]) clearTimeout(cicloTimers[id]);
-  if (badgeHasMediaLink(id)) return;
+  if (badgeHasMediaLink(id) || g.cicloPausado) return;
 
   if (!g.visibilidadManual && !g.usarCiclo) return;
 
@@ -334,6 +354,8 @@ function gestionarCiclo(id) {
   }
 }
 
+Object.keys(state.gafetes).forEach(gestionarCiclo);
+
 io.on('connection', socket => {
   socket.emit('sync-gafetes', state.gafetes);
   socket.emit('sync-medios', { audios: state.audios, videos: state.videos, imagenes: state.imagenes, pizarras: state.pizarras });
@@ -356,6 +378,8 @@ io.on('connection', socket => {
     state.gafetes[data.id] = {
       ...state.gafetes[data.id],
       ...data,
+      opacidad: clampNumber(data.opacidad, state.gafetes[data.id].opacidad ?? 100, 0, 100),
+      escala: clampNumber(data.escala, state.gafetes[data.id].escala ?? 1, 0.5, 3),
       borderWidth: Number.isFinite(borderWidth)
         ? Math.max(0, Math.min(30, borderWidth))
         : state.gafetes[data.id].borderWidth ?? 2
@@ -384,6 +408,8 @@ io.on('connection', socket => {
       logoPos: 'left',
       bgColor: '#18181b',
       bgAlpha: 90,
+      opacidad: 100,
+      escala: 1,
       borderColor: '#10b981',
       borderWidth: 2,
       borderRadius: '12px',
@@ -396,7 +422,8 @@ io.on('connection', socket => {
       usarCiclo: false,
       tiempoOculto: 3,
       visibilidadManual: false,
-      visibilidad: false
+      visibilidad: false,
+      cicloPausado: false
     };
     broadcastState();
     persistState();
@@ -461,6 +488,9 @@ io.on('connection', socket => {
       nextState.gafetes[id] = {
         ...badge,
         visibilidadManual: Boolean(badge.visibilidadManual ?? badge.visibilidad),
+        opacidad: clampNumber(badge.opacidad, 100, 0, 100),
+        escala: clampNumber(badge.escala, 1, 0.5, 3),
+        cicloPausado: Boolean(badge.cicloPausado),
         visibilidad: false
       };
     }
@@ -516,6 +546,16 @@ io.on('connection', socket => {
         }
         target[id] = {
           ...media,
+          volumen: clampNumber(media.volumen, 80, 0, 100),
+          ...(type === 'video' || type === 'imagen'
+            ? {
+              opacidad: clampNumber(media.opacidad, 100, 0, 100),
+              posX: clampNumber(media.posX, 50, 0, 100),
+              posY: clampNumber(media.posY, 50, 0, 100),
+              ancho: clampNumber(media.ancho, 320, 40, 1920),
+              alto: clampNumber(media.alto, 180, 40, 1080)
+            }
+            : {}),
           activo: false,
           gafeteId: badgeId,
           ...(type === 'imagen' ? { audioId } : {})
@@ -542,6 +582,7 @@ io.on('connection', socket => {
         fondoAlpha: clampNumber(board.fondoAlpha, 0, 0, 100),
         bordeColor: validHexColor(board.bordeColor) ? board.bordeColor : '#38bdf8',
         bordeAncho: clampNumber(board.bordeAncho, 2, 0, 30),
+        opacidad: clampNumber(board.opacidad, 100, 0, 100),
         dibujo: board.dibujo || '',
         activo: false
       };
@@ -575,6 +616,19 @@ io.on('connection', socket => {
     gestionarCiclo(id);
   });
 
+  socket.on('toggle-ciclo-gafete', id => {
+    const badge = state.gafetes[id];
+    if (!badge || !badge.usarCiclo) return;
+    if (badgeHasMediaLink(id)) {
+      socket.emit('error-control', 'Este gafete está vinculado a un medio y no puede ejecutar un ciclo independiente.');
+      return;
+    }
+    badge.cicloPausado = !badge.cicloPausado;
+    gestionarCiclo(id);
+    broadcastState();
+    persistState();
+  });
+
   socket.on('crear-media', payload => {
     const { tipo, nombreArchivo } = payload && typeof payload === 'object' ? payload : {};
     if (!validMediaType(tipo) || !getAvailableFiles(tipo).some(file => file.nombre === nombreArchivo)) {
@@ -603,7 +657,8 @@ io.on('connection', socket => {
         alto: 180,
         forma: 'rectangulo',
         colorBorde: '#3b82f6',
-        anchoBorde: 2
+        anchoBorde: 2,
+        opacidad: 100
       });
     }
     if (tipo === 'imagen') media.audioId = null;
@@ -625,6 +680,7 @@ io.on('connection', socket => {
       alto: 360,
       fondo: '#ffffff',
       fondoAlpha: 0,
+      opacidad: 100,
       bordeColor: '#38bdf8',
       bordeAncho: 2,
       dibujo: ''
@@ -654,6 +710,7 @@ io.on('connection', socket => {
       fondoAlpha: clampNumber(data.fondoAlpha, board.fondoAlpha, 0, 100),
       bordeColor: validHexColor(data.bordeColor) ? data.bordeColor : board.bordeColor || '#38bdf8',
       bordeAncho: clampNumber(data.bordeAncho, board.bordeAncho ?? 2, 0, 30),
+      opacidad: clampNumber(data.opacidad, board.opacidad ?? 100, 0, 100),
       dibujo: typeof data.dibujo === 'string' ? data.dibujo : board.dibujo,
       activo: Boolean(board.activo)
     };
@@ -710,6 +767,7 @@ io.on('connection', socket => {
       };
       updated.posX = numberOr(data.posX, media.posX, 0, 100);
       updated.posY = numberOr(data.posY, media.posY, 0, 100);
+      updated.opacidad = numberOr(data.opacidad, media.opacidad ?? 100, 0, 100);
       updated.ancho = numberOr(data.ancho, media.ancho, 40, 1920);
       updated.alto = numberOr(data.alto, media.alto, 40, 1080);
       updated.anchoBorde = numberOr(data.anchoBorde, media.anchoBorde, 0, 30);
@@ -807,7 +865,31 @@ io.on('connection', socket => {
 
 if (!fs.existsSync(statePath)) flushState();
 
-const port = Number(process.env.PORT) || 3000;
-server.listen(port, () => {
-  console.log(`Servidor activo en http://localhost:${port}`);
-});
+function startServer({ port = Number(process.env.PORT) || 3000, host } = {}) {
+  if (server.listening) return Promise.resolve(server.address());
+  return new Promise((resolve, reject) => {
+    const onError = error => {
+      server.off('listening', onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off('error', onError);
+      const address = server.address();
+      console.log(`Servidor activo en http://${host || 'localhost'}:${address.port}`);
+      resolve(address);
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    if (host) server.listen(port, host);
+    else server.listen(port);
+  });
+}
+
+if (require.main === module) {
+  startServer().catch(error => {
+    console.error('No se pudo iniciar el servidor:', error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { startServer, stopServer: callback => io.close(callback) };
